@@ -85,13 +85,23 @@ tot_SRMC = (energy_SRMC
 
 def break_even():
     """
-    Calculates the break even (i.e 0 profit) availability and utilisation bids
+    Calculates the availability and utilisation bids such that an asset
+    breaks even (i.e 0 profit) for any number of actual utilisation hours.
+    
     Fixed costs inform availability price
     SRMC inform utilisation price
+    
+    This does not guarentee that the TCV will be low than the TCV limit, or
+    that availability or utilisation bids will be under the respective
+    ceiling prices.
 
     Returns
     -------
-    None.
+    avail: float
+        The availability bid
+        
+    util: float
+        The utilisation bid
 
     """
     util = tot_SRMC
@@ -102,11 +112,32 @@ def break_even():
 def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
                tot_hrs = tot_avail_hrs):
     """
-    Calculates the costs of participation, revenue and profit
+    Calculates the costs matrix of participation, revenue and profit as a
+    function 
+
+    Parameters
+    ----------
+    cap : float
+        Capacity of the asset.
+    avail_bid : float
+        Availability bid to calculate costs.
+    util_bid : float
+        Utilisation bid to calculate costs.
+    fixed_cost : float
+        The fixed costs of market participation
+    marginal_cost : float
+        The marginal (per kWh) cost of utilisation.
+    tot_hrs : float, optional
+        The total possible hours in the auctioned service. 
+        The default is the global parameter tot_avail_hrs.
 
     Returns
     -------
-    None.
+    cost_matrix : np.array
+        Numpy array used for plotting
+    
+    cost_df : pd.DataFrame
+        A dataframe version of the cost_matrix array
 
     """
     # create lists
@@ -139,8 +170,9 @@ def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
     profit = revenue - tot_cost
     tcv = revenue / energy
     
-    cost_matrix = np.array([util_hours, energy, avail_bids, util_bids, marginal_cost,
-            fixed_cost, tot_cost, revenue, profit, tcv])
+    cost_matrix = np.array([util_hours, energy, avail_bids, util_bids,
+                            marginal_cost, fixed_cost, tot_cost, revenue,
+                            profit, tcv])
     cost_df = pd.DataFrame(cost_matrix.T,
                            columns=["Utilisation hrs",
                                     "energy (kWh)",
@@ -157,38 +189,27 @@ def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
 def maxout_tcv(exp_util_hrs, bid_weight):
     """
     This calculates the availability and utilisation bids to max out the tcv
-    for a given expected number of hours of delivery. This can be used to 
-    replicate Harry Orchards original analysis with bid_weight 0 for 
+    for a given expected number of hours of delivery and chosen weighting
+    between availability and utilisation. This can be used to 
+    replicate Harry Orchards (HO) original analysis with bid_weight 0 for 
     all availability and 1 for all utilisaton.
-    
 
-
+    Parameters
+    ----------
+    exp_util_hrs : float
+        The expected number of utilisation hours.
+    bid_weight : float
+        A value between 0 and 1. The weighting of the tcv between availability
+        and utilisation.
 
     Returns
     -------
-    None.
+    avail : float
+        Availability bid.
+    util : float
+        Utilisation bid.
 
     """
-    
-    # if bid_weight == 1:
-    #     util = np.min([util_ceil, tcv])
-    #     avail = 0.0
-        
-    # elif bid_weight == 0:
-    #     util = 0.0
-    #     avail_max = ((tcv * exp_util_hrs * cap) 
-    #                  / cap 
-    #                  / tot_avail_hrs)
-    #     print("max availability bid: {:0.4f} £/kW/h".format(avail_max))
-    #     avail = np.min([avail_ceil, avail_max])
-    # else:
-    #     util_max = bid_weight * tcv
-    #     avail_max = ((((1 - bid_weight)* tcv) * exp_util_hrs * cap) 
-    #                  / cap 
-    #                  / tot_avail_hrs)
-        
-    #     util = np.min([util_max, util_ceil])
-    #     avail = np.min([avail_ceil, avail_max])
         
     util_max = bid_weight * tcv
     avail_max = ((((1 - bid_weight)* tcv) * exp_util_hrs * cap) 
@@ -202,11 +223,23 @@ def maxout_tcv(exp_util_hrs, bid_weight):
 
 def calc_avail_bid(exp_util_hrs, util_bid):
     """
-    Given a utilisation bid, calculate max availability bid and be equal to TCV
+    Given a chosen utilisation bid, calculate max availability bid that 
+    ensures the TCV is not exceeded.
+
+    Parameters
+    ----------
+    exp_util_hrs : float
+        The expected number of utilisation hours.
+    util_bid : float
+        The user defined utilisation bid.
 
     Returns
     -------
-    None.
+    avail : float
+        The max possible availability bid.
+    weight : float
+        The corresponding weighting assuming this combination of utilisation
+        and availability bid.
 
     """
     remaining_tcv = tcv - util_bid
@@ -219,11 +252,23 @@ def calc_avail_bid(exp_util_hrs, util_bid):
 
 def calc_util_bid(exp_util_hrs, avail_bid):
     """
-    Given an availability bid, calculate max utilisation bid and be equal to TCV
+    Given a chosen availability bid, calculate max utilisation bid that 
+    ensures the TCV is not exceeded.
+
+    Parameters
+    ----------
+    exp_util_hrs : float
+        The expected number of utilisation hours.
+    avail_bid : float
+        The user defined availability bid.
 
     Returns
     -------
-    None.
+    util : float
+        The max possible utilisation bid.
+    weight : float
+        The corresponding weighting assuming this comibination of availability
+        and utilisation bid.
 
     """
     util = (((tcv * exp_util_hrs * cap) - (avail_bid * tot_avail_hrs * cap))
@@ -231,7 +276,7 @@ def calc_util_bid(exp_util_hrs, avail_bid):
     weight = util / tcv
     return util, weight
 
-def profit_vs_expected_util(avail_bid=None, util_bid=None, weight=None):
+def profit_vs_expected_util_vs_weight(avail_bid=None, util_bid=None, weight=None):
     """
     Calculate 3D matrix of profit for expected utilisation vs actual
     utilisation for a particular set of bids and strategy weight. 
@@ -267,8 +312,10 @@ def profit_vs_expected_util(avail_bid=None, util_bid=None, weight=None):
     
     exp_util_range = np.arange(0.0, tot_avail_hrs+1, 1.0)
     weight_range = np.linspace(0.0,1.0,11)
-    profits = np.zeros((len(exp_util_range),len(weight_range), len(exp_util_range)))
-    revenues = np.zeros((len(exp_util_range),len(weight_range), len(exp_util_range)))
+    profits = np.zeros((len(exp_util_range), len(weight_range),
+                        len(exp_util_range)))
+    revenues = np.zeros((len(exp_util_range), len(weight_range),
+                         len(exp_util_range)))
     for i, exp_util in enumerate(exp_util_range):
         for j, weight in enumerate(weight_range):
             bids = maxout_tcv(exp_util, weight)
@@ -302,26 +349,40 @@ def plot_exp_vs_actual(profits, weight):
         
 
 if __name__ == "__main__":
+    
+    #%% Scenarios
+    ## Break even
+    # this calculates the utilisation bid and availability bid such that an
+    # asset breaks even (i.e. 0 profit) no matter what number the actual 
+    # utilisation hours are. This does not guarentee a bid will be under the
+    # TCV or utilisation or availability ceiling prices. The cost matrix is 
+    # generated with calc_costs function. 
     break_even_df = calc_costs(cap, break_even()[0], break_even()[1],
                               tot_fixed, tot_SRMC)[1]
     exp_profit = break_even_df["Profit (£)"][break_even_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Break even profit: £{:0.2f}".format(exp_profit))
     
-    # recreates HO's max availability scenario
+    ## Maximum availability scenario
+    # recreates HO's max availability scenario. This ensures TCV is equal to
+    # the TCV limit.
     bids = maxout_tcv(exp_util_hrs, 0.0)
     max_avail_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
     exp_profit = max_avail_df["Profit (£)"][max_avail_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Max availability profit: £{:0.2f}".format(exp_profit))
     
-    # recreates HO's max utilisation scenario
+    ## Maximum utilisation scenario
+    # recreates HO's max utilisation scenario. This ensures TCV is equal to
+    # the TCV limit.
     bids = maxout_tcv(exp_util_hrs, 1.0)
     max_util_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
     exp_profit = max_util_df["Profit (£)"][max_util_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Max utilisation profit: £{:0.2f}".format(exp_profit))
     
-    
+    ## Middle weighting
+    # This splits the total contract equally between availability and 
+    # utilisation. This ensures TCV is equal to the TCV limit.
     bids = maxout_tcv(exp_util_hrs, 0.5)
     middle_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
