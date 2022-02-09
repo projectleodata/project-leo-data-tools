@@ -313,8 +313,9 @@ def calc_util_bid(exp_util_hrs, avail_bid):
         and utilisation bid.
 
     """
-    util = (((tcv * exp_util_hrs * cap) - (avail_bid * tot_avail_hrs * cap))
-            / (exp_util_hrs * cap))
+    util_max = (((tcv * exp_util_hrs * cap) - (avail_bid * tot_avail_hrs * cap))
+               / (exp_util_hrs * cap))
+    util = np.min([util_ceil, util_max])
     weight = util / tcv
     return util, weight
 
@@ -367,6 +368,19 @@ def profit_vs_expected_util_vs_weight(avail_bid=None, util_bid=None, weight=None
             revenues[i][j] = costs[7]
 
     return profits
+
+def profit_vs_expected_util(avail_bid=None, util_bid=None):
+    exp_util_range = np.arange(0.0, tot_avail_hrs+1, 1.0)
+    #weight_range = np.linspace(0.0,1.0,11)
+    profits = np.zeros((len(exp_util_range), len(exp_util_range)))
+    revenues = np.zeros((len(exp_util_range), len(exp_util_range)))
+    for i, exp_util in enumerate(exp_util_range):
+        costs = calc_costs(cap, avail_bid, util_bid, tot_fixed, tot_SRMC)[0]
+        profits[i] = costs[8]
+        revenues[i] = costs[7]
+
+    return profits
+    
 
 def plot_weight_vs_actual(profits, exp_util):
     fig, ax = plt.subplots(figsize=(15,6))
