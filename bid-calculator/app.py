@@ -1185,7 +1185,7 @@ bidAnalysis = dbc.Card(
                                                     "competitive market, while remaining below the TCV, will give you "
                                                     "the best strategy to maximise profits. Use the fields below to "
                                                     "determine how varying Availability and Utilisation affect your "
-                                                    "options. "
+                                                    "options."
                                                 ],
                                                 className="paratext"
                                             ),
@@ -1197,6 +1197,68 @@ bidAnalysis = dbc.Card(
                                     ),
                                 ],
                                 className="row ",
+                            ),
+                            # Expected Hours entry
+                            html.Div(
+                                [
+                                    html.P(
+                                        [
+                                            html.Span(
+                                                "Expected Hours *", id="expt-tooltip"
+                                            ),
+                                        ],
+                                        className='paratext'
+                                    ),
+                                    dbc.Tooltip(
+                                        "Enter the expected number of hours that your asset will \
+                                        be called on for delivering a flex service",
+                                        target="expt-tooltip",
+                                        placement="top",
+                                        className="paratext",
+                                        style={
+                                            "background-color": "#3D4E68",
+                                            "color": "white",
+                                            'width': '300px',
+                                            'text-align': 'center',
+                                            'align-items': 'center',
+                                            'border-radius': '30px',
+                                            'padding-top': '5px',
+                                            'padding-left': '15px',
+                                            'padding-right': '15px',
+                                            'padding-bottom': '5px',
+                                        }
+                                    ),
+                                ],
+                                className="row",
+                                style={
+                                    'text-align': 'center',
+                                    'padding-right': '70px'
+                                }
+                            ),
+                            html.Div(
+                                [
+                                    dcc.Input(
+                                        id="expt-hrs",
+                                        type="number",
+                                        value=3,
+                                        min=0,
+                                        max=20,
+                                        step=1,
+                                        style={
+                                            'fontFamily': "avenir",
+                                            'fontSize': '16px',
+                                            'color': 'white',
+                                            'background-color': '#ea8f32',
+                                            'width': '100px',
+                                            'text-align': 'center'
+                                        }
+                                    ),
+                                ],
+                                className="row",
+                                style={
+                                    'text-align': 'center',
+                                    'padding-right': '70px'
+                                }
                             ),
                             # Bid entry and max. calculations
                             html.Div(
@@ -1292,6 +1354,78 @@ bidAnalysis = dbc.Card(
                             html.Div(id='max-bids'),
                             html.Div(id='exceed-warning'),
 
+                            # Data table Preample
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.H6(
+                                                "The Deeper Dive",
+                                                className="subtitle padded",
+                                            ),
+                                            html.P(
+                                                [
+                                                    "\
+                                                    Use this section to explore the numbers more closely. \
+                                                    We have laid out the data tables in neat and collapsible \
+                                                    forms so that you can see how costs vary by operational \
+                                                    costs for various Availability, Utilisation strategies \
+                                                    across a range of service \
+                                                    hours. There is also the functionality to weight your \
+                                                    bids by maximising Availability versus Utilisation to \
+                                                    see how your profit margins are affected based on your \
+                                                    asset input on the previous tab. Use the menu below to \
+                                                    see the details and note that your expected number of hours \
+                                                    is highlighted for your reference."
+                                                ],
+                                                className="paratext"
+                                            ),
+                                        ],
+                                        className="twelve columns",
+                                    ),
+                                ],
+                                className="row ",
+                                style={
+                                    'padding-bottom': '30px',
+                                    'padding-top': '50px'
+                                }
+                            ),
+                            # Data table dropdown
+                            html.Div(
+                                [
+                                    dcc.Dropdown(
+                                        id='show-datatbl',
+                                        options=[
+                                            {
+                                                'label': i, 'value': i
+                                            } for i in
+                                            ['Hide Data Tables', 'S1: Utilisation vs Costs',
+                                             'S2: Maximising Availability', 'S3: Maximising Utilisation',
+                                             'S4: Break Even Costs', 'S5: User-Defined Bids']
+                                        ],
+                                        placeholder="Select a data table",
+                                        multi=False,
+                                        className="paratext"
+                                    ),
+                                ],
+                                className="four columns",
+                                style={
+                                    'padding-bottom': '50px'
+                                }
+                            ),
+                            # Visible data table
+                            html.Div(
+                                [
+                                    html.Div(className="paratext", id="visible-datatbl")
+                                ],
+                                className="row",
+                                style={
+                                    "padding-top": "30px",
+                                    "padding-bottom": "50px"
+                                }
+                            ),
+                            # Blank row for page padding
+                            html.Div([], style={"padding-bottom": "100px"}),
                             # Maximising bid options preamble
                             html.Div(
                                 [
@@ -1330,75 +1464,6 @@ bidAnalysis = dbc.Card(
                                     'padding-top': '50px'
                                 }
                             ),
-                            # Bid calculations
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                [
-                                                    html.Span(
-                                                        "Expected Hours *", id="expt-tooltip"
-                                                    ),
-                                                ],
-                                                className='paratext'
-                                            ),
-                                            dbc.Tooltip(
-                                                "Enter the expected number of hours that your asset will \
-                                                be called on for delivering a flex service",
-                                                target="expt-tooltip",
-                                                placement="top",
-                                                className="paratext",
-                                                style={
-                                                    "background-color": "#3D4E68",
-                                                    "color": "white",
-                                                    'width': '300px',
-                                                    'text-align': 'center',
-                                                    'align-items': 'center',
-                                                    'border-radius': '30px',
-                                                    'padding-top': '5px',
-                                                    'padding-left': '15px',
-                                                    'padding-right': '15px',
-                                                    'padding-bottom': '5px',
-                                                }
-                                            ),
-                                        ],
-                                        className="six columns",
-                                        style={
-                                            'text-align': 'right',
-                                        }
-                                    ),
-                                    html.Div(
-                                        [
-                                            dcc.Input(
-                                                id="expt-hrs",
-                                                type="number",
-                                                value=3,
-                                                min=0,
-                                                max=20,
-                                                step=1,
-                                                style={
-                                                    'fontFamily': "avenir",
-                                                    'fontSize': '16px',
-                                                    'color': 'white',
-                                                    'background-color': '#ea8f32',
-                                                    'width': '100px',
-                                                    'text-align': 'center'
-                                                }
-                                            ),
-                                        ],
-                                        className="six columns",
-                                        style={
-                                            'text-align': 'left',
-                                        }
-                                    ),
-                                ],
-                                className="row",
-                                style={
-                                    'text-align': 'center',
-                                    'padding-top': '30px'
-                                }
-                            ),
                             # Weighting slider
                             html.Div(
                                 [
@@ -1422,77 +1487,6 @@ bidAnalysis = dbc.Card(
                             ),
                             # Output of Maxout TCV bid calculations
                             html.Div(id='maxout_tcv_bids'),
-                            # Data table Preample
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.H6(
-                                                "The Deeper Dive",
-                                                className="subtitle padded",
-                                            ),
-                                            html.P(
-                                                [
-                                                    "\
-                                                    Use this section to explore the numbers more closely. \
-                                                    We have laid out the data tables in neat and collapsible \
-                                                    forms so that you can see how costs vary by operational \
-                                                    costs for various Availability, Utilisation strategies \
-                                                    across a range of service \
-                                                    hours. There is also the functionality to weight your \
-                                                    bids by maximising Availability versus Utilisation to \
-                                                    see how your profit margins are affected based on your \
-                                                    asset input on the previous tab. Use the menu below to \
-                                                    see the details and note that your expected number of hours \
-                                                    is highlighted for your reference."
-                                                ],
-                                                className="paratext"
-                                            ),
-                                        ],
-                                        className="twelve columns",
-                                    ),
-                                ],
-                                className="row ",
-                                style={
-                                    'padding-bottom': '30px'
-                                }
-                            ),
-                            # Data table dropdown
-                            html.Div(
-                                [
-                                    dcc.Dropdown(
-                                        id='show-datatbl',
-                                        options=[
-                                            {
-                                                'label': i, 'value': i
-                                            } for i in
-                                            ['Hide Data Tables', 'S1: Utilisation vs Costs',
-                                             'S2: Maximising Availability', 'S3: Maximising Utilisation',
-                                             'S4: Break Even Costs', 'S5: User-Defined Bids']
-                                        ],
-                                        placeholder="Select a data table",
-                                        multi=False,
-                                        className="paratext"
-                                    ),
-                                ],
-                                className="four columns",
-                                style={
-                                    'padding-bottom': '50px'
-                                }
-                            ),
-                            # Visible data table
-                            html.Div(
-                                [
-                                    html.Div(className="paratext", id="visible-datatbl")
-                                ],
-                                className="row",
-                                style={
-                                    "padding-top": "30px",
-                                    "padding-bottom": "50px"
-                                }
-                            ),
-                            # Blank row for page padding
-                            html.Div([], style={"padding-bottom": "150px"})
                         ],
                         className="sub_page",
                     ),
