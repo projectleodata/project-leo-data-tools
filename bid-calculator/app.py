@@ -152,10 +152,10 @@ def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_f
     avail_bids = [avail_bid] * len(util_hours)
     util_bids = [util_bid] * len(util_hours)
 
+    # Creating data for the data table columns
     energy = util_hours * asset_cap
-    # TODO: Need to fix this as it does not make sense in original code
-    # marginal_cost = tot_marg * energy
     tot_marg = [tot_marg] * len(util_hours)
+    marginal_cost = tot_marg * energy
     fixed_cost = (persn_cost_fixed / 60) * persn_cost_hrlyrate
     fixed_cost = np.ones(util_hours.shape) * fixed_cost
     tot_cost = tot_marg + fixed_cost
@@ -163,7 +163,8 @@ def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_f
     profit = revenue - tot_cost
     tcv = revenue / energy
 
-    cost_matrix = np.array([util_hours, energy, avail_bids, util_bids, tot_marg,
+    # Full data matrix and dataframe creation
+    cost_matrix = np.array([util_hours, energy, avail_bids, util_bids, marginal_cost,
                             fixed_cost, tot_cost, revenue, profit, tcv])
 
     # TODO: Need to ensure column headers are consistently named throughout tables
@@ -172,7 +173,7 @@ def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_f
                                     "Energy (kWh)",
                                     "Availability Bid (£/kW/h)",
                                     "Utilisation Bid (£/kWh)",
-                                    "Marginal Cost (£/kWh)",
+                                    "Marginal Cost (£)",
                                     "Auction Fixed Cost (£)",
                                     "Total Service Cost (£)",
                                     "Revenue (£)",
