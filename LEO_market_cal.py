@@ -161,7 +161,7 @@ def inde_maxTCV(exp_util_hrs):
     
     return avail_bid, util_bid, weight
 
-def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
+def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_rate,
                tot_hrs = tot_avail_hrs):
     """
     Calculates the costs matrix of participation, revenue and profit as a
@@ -177,7 +177,7 @@ def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
         Utilisation bid to calculate costs.
     fixed_cost : float
         The fixed costs of market participation
-    marginal_cost : float
+    marginal_rate : float
         The marginal (per kWh) cost of utilisation.
     tot_hrs : float, optional
         The total possible hours in the auctioned service. 
@@ -215,7 +215,7 @@ def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
     
     # calculations - actually, probably didn't need to define them all above
     energy = util_hours * cap
-    marginal_cost = marginal_cost * energy
+    marginal_cost = marginal_rate * energy
     fixed_cost = np.ones(util_hours.shape) * fixed_cost
     tot_cost = marginal_cost + fixed_cost
     revenue = (util_bids * energy) + (avail_bid * cap * tot_avail_hrs)
@@ -230,7 +230,7 @@ def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
                                     "energy (kWh)",
                                     "Availability bid (£/kW/h)",
                                     "Utilisation bid (£/kWh)",
-                                    "Marginal cost (£/kWh)",
+                                    "Marginal cost (£)",
                                     "Auction fixed cost (£)",
                                     "Total service cost (£)",
                                     "Revenue (£)",
