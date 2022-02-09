@@ -442,7 +442,8 @@ def plot_exp_vs_act_heatmap_plotly(profits, weight):
                               z=data,
                               colorscale='RdBu',
                               zmid=0,
-                              text=data))
+                              text=data,
+                              colorbar={"title": 'Profit (£)'}))
 
     
     fig.add_shape(
@@ -452,8 +453,12 @@ def plot_exp_vs_act_heatmap_plotly(profits, weight):
         line_color='black'
         )
     
-    fig.update_yaxes(title_text="Expected Utilisation Hours")
-    fig.update_xaxes(title_text="Actual Utilisation Hours")
+    fig.update_yaxes(title_text="Expected Utilisation Hours",
+                     nticks=int(tot_avail_hrs+1),
+                     range=[-0.5,tot_avail_hrs+0.5])
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_avail_hrs+1),
+                     range=[-0.5,tot_avail_hrs+0.5])
     fig.show()
     return fig
     
@@ -496,7 +501,9 @@ def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs):
 
     
     fig.update_yaxes(title_text="Bid weighting")
-    fig.update_xaxes(title_text="Actual Utilisation Hours")
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_avail_hrs+1),
+                     range=[0,tot_avail_hrs])
     fig.update_yaxes(title_text="Utilisation bid", secondary_y=True)
     fig.show()
     return fig
@@ -543,6 +550,7 @@ def profit_vs_actual_plotly(exp_util_hrs, avail_bid, util_bid):
               increase profit""", 
               annotation_position="top left",
               fillcolor="red", opacity=0.1, line_width=0)
+    fig.update_layout(legend_title_text='Bid Weighting Scenario')
     fig.show()
     return fig
         
@@ -594,7 +602,7 @@ if __name__ == "__main__":
     inde_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
     exp_profit = inde_df["Profit (£)"][inde_df["Utilisation hrs"]==exp_util_hrs].values[0]
-    print("Middle profit: £{:0.2f}".format(exp_profit))
+    print("Independent profit: £{:0.2f}".format(exp_profit))
     
     
     analysis = profit_vs_expected_util_vs_weight(weight=0.5)
