@@ -11,15 +11,25 @@ Things to do/check
  - use of global variables, and those in functions is messy
  - should probably wrap everything in a class (called Service?) This would help with the above point, and all global variables can be changed to self.
  - Current assumes 100% utilisation. How does the settlement rules for utilisation and availability impact the outcome.
+ - add functionality to undercut tcv max. Can probably be done manualy by changing the tcv limit. Otherwise, add scaler to any function that uses tcv
 """
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import seaborn as sns
+
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.io as pio
+#pio.renderers.default = 'svg'
+pio.renderers.default = 'browser'
+
+np.seterr(divide='ignore') 
 
 # =============================================================================
 # Inputs
@@ -383,6 +393,9 @@ def profit_vs_expected_util(avail_bid=None, util_bid=None):
     
 
 def plot_weight_vs_actual(profits, exp_util):
+    
+    # make x axis utilisation factor = ratio of actual / expected. Add line indicating flat profile.
+    
     fig, ax = plt.subplots(figsize=(15,6))
     sns.heatmap(profits[exp_util], ax=ax, annot=profits[exp_util], fmt='.2f', annot_kws={"fontsize":6})
     ax.set_xticklabels(['{:,.0f}'.format(x) for x in np.arange(0.0, tot_avail_hrs+1, 1.0)], rotation=45, ha='right', rotation_mode='anchor')
@@ -402,6 +415,136 @@ def plot_exp_vs_actual(profits, weight):
     ax.set_xlabel("Actual Utilisation Hours")
     ax.set_ylabel("Expected Utilisation Hours")
     plt.show()
+    
+def plot_exp_vs_act_heatmap_plotly(profits, weight):
+    
+    weight_range = np.linspace(0.0, 1.0, profits.shape[1])
+    weight_index = np.where(weight_range == weight)
+
+    data = profits[:,weight_index[0][0],:]
+    
+    # lim = np.max(np.abs(profits))
+    
+    # using plotly express, i can't work out how to set 0 as midpoint of colorscale or how to annotate. 
+    # fig = px.imshow(data,
+    #             labels=dict(x="Actual Utilisation Hours", y="Expected Utilisation Hours", color="Profit (£)"),
+    #             x = np.arange(0.0, tot_avail_hrs+1, 1.0),
+    #             y = np.arange(0.0, tot_avail_hrs+1, 1.0),
+    #             color_continuous_scale='RdBu',
+    #               aspect="auto", 
+    #             )
+    
+    # using graph_objects, i can't work out how to add annotations in squares
+    # think it shoud be the text argument tbut thtat doesn't work.
+    fig = make_subplots()
+    fig.add_trace(go.Heatmap(x = np.arange(0.0, tot_avail_hrs+1, 1.0),
+                              y = np.arange(0.0, tot_avail_hrs+1, 1.0),
+                              z=data,
+                              colorscale='RdBu',
+                              zmid=0,
+                              text=data))
+
+    
+    fig.add_shape(
+        type='rect',
+        x0=exp_util_hrs-0.5, x1=exp_util_hrs+0.5, y0=exp_util_hrs-0.5, y1=exp_util_hrs+0.5,
+        xref='x', yref='y',
+        line_color='black'
+        )
+    
+    fig.update_yaxes(title_text="Expected Utilisation Hours")
+    fig.update_xaxes(title_text="Actual Utilisation Hours")
+    fig.show()
+    return fig
+    
+def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs):
+    
+    exp_range = np.arange(0.0, tot_avail_hrs+1, 1.0)
+    exp_index = np.where(exp_range == exp_util_hrs)
+
+    data = profits[exp_index[0][0],:,:]
+    
+    # using graph_objects, i can't work out how to add annotations in squares
+    # think it shoud be the text argument but that doesn't work.
+    
+    # also want to add secondary axis which uses different 'unit'.
+    # e.g. weight 0 - 1 can also be expressed as utilisation bid 0 - util_max.
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # this first one just makes the secondary y axis appear
+    fig.add_trace(go.Heatmap(x = np.arange(0.0, tot_avail_hrs+1, 1.0),
+                              y = np.linspace(0.0, util_ceil, profits.shape[1]),
+                              z=data,
+                              colorscale='RdBu',
+                              zmid=0,
+                              text=data,
+                              colorbar={"title": 'Profit (£)'},
+                              ), secondary_y=True)
+    
+    
+    
+    fig.add_trace(go.Heatmap(x = np.arange(0.0, tot_avail_hrs+1, 1.0),
+                              y = np.linspace(0.0, 1.0, profits.shape[1]),
+                              z=data,
+                              colorscale='RdBu',
+                              zmid=0,
+                              text=data,
+                              colorbar={"title": 'Profit (£)'}))
+    fig.add_vrect(x0=exp_util_hrs-0.5, x1=exp_util_hrs+0.5, line_width=1)
+    
+    
+
+    
+    fig.update_yaxes(title_text="Bid weighting")
+    fig.update_xaxes(title_text="Actual Utilisation Hours")
+    fig.update_yaxes(title_text="Utilisation bid", secondary_y=True)
+    fig.show()
+    return fig
+    
+def profit_vs_actual_plotly(exp_util_hrs, avail_bid, util_bid):
+    
+    bids = maxout_tcv(exp_util_hrs, 0.0)
+    max_avail_profit = calc_costs(cap, bids[0], bids[1],
+                              tot_fixed, tot_SRMC)[1]["Profit (£)"]
+    
+    bids = maxout_tcv(exp_util_hrs, 1.0)
+    max_util_profit = calc_costs(cap, bids[0], bids[1],
+                              tot_fixed, tot_SRMC)[1]["Profit (£)"]
+    
+    user_def_prof = calc_costs(cap, avail_bid, util_bid,
+                              tot_fixed, tot_SRMC)[1]["Profit (£)"]
+
+
+    data = pd.DataFrame({"max availability": max_avail_profit,
+                         "max utilisation": max_util_profit,
+                         "user defined": user_def_prof},
+                         index = np.arange(0.0, tot_avail_hrs+1, 1.0))
+    
+    fig = px.line(data, x=data.index, y=["max availability",
+                                         "max utilisation",
+                                         "user defined" ])
+    
+    fig.update_yaxes(title_text="Profit (£)")
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_avail_hrs+1),
+                     range=[0,tot_avail_hrs])
+    fig.add_vline(x=exp_util_hrs, fillcolor='black')
+    fig.add_vrect(x0=0, x1=exp_util_hrs, 
+              annotation_text="""
+              If expecting to be under-utilised, <br> 
+              weight bid towards availability to <br>
+              increase profit""", 
+              annotation_position="top right",
+              fillcolor="blue", opacity=0.1, line_width=0)
+    fig.add_vrect(x0=exp_util_hrs, x1=tot_avail_hrs, 
+              annotation_text="""
+              If expecting to be over-utilised, <br> 
+              weight bid towards utilisation to <br>
+              increase profit""", 
+              annotation_position="top left",
+              fillcolor="red", opacity=0.1, line_width=0)
+    fig.show()
+    return fig
         
 
 if __name__ == "__main__":
@@ -445,9 +588,6 @@ if __name__ == "__main__":
     exp_profit = middle_df["Profit (£)"][middle_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Middle profit: £{:0.2f}".format(exp_profit))
     
-    analysis = profit_vs_expected_util(weight=0.5)
-    plot_weight_vs_actual(analysis, 3)
-    plot_exp_vs_actual(analysis, 0.5)
     ## independent scenario
     # this ensures profit is independent of actual hours vs expected utilisation.
     bids = inde_maxTCV(exp_util_hrs)
@@ -456,3 +596,11 @@ if __name__ == "__main__":
     exp_profit = inde_df["Profit (£)"][inde_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Middle profit: £{:0.2f}".format(exp_profit))
     
+    
+    analysis = profit_vs_expected_util_vs_weight(weight=0.5)
+    plot_exp_vs_act_heatmap_plotly(analysis, 0.5)
+    plot_weight_vs_act_heatmap_plotly(analysis ,exp_util_hrs)
+    
+    ## independent scenario
+    bids = inde_maxTCV(exp_util_hrs)
+    profit_vs_actual_plotly(exp_util_hrs, bids[0], bids[1])
