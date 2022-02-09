@@ -9,7 +9,7 @@ Things to do/check
  - use correct language for profit, cost, revenue etc
  - something slightly different in the energy_SRMC between excel and python (something to do with python internal float representation maybe?)
  - use of global variables, and those in functions is messy
- - add functions that calculate either avail bid or util bid depending on which was entered, keeping with tcv.
+ - should probably wrap everything in a class (called Service?) This would help with the above point, and all global variables can be changed to self.
  - Current assumes 100% utilisation. How does the settlement rules for utilisation and availability impact the outcome.
 """
 
@@ -108,6 +108,48 @@ def break_even():
     avail = tot_fixed / cap / tot_avail_hrs
     
     return avail, util
+
+def inde_maxTCV(exp_util_hrs):
+    """
+    Determines the availability and utilisation bid that maximises the TCV for
+    the expected number of hours, but ensures profit is independent of actual
+    utilisation hours. This does not guarentee bids will be under the
+    individual ceiling prices.
+    
+    Parameters
+    ----------
+    exp_util_hrs : float
+        The expected number of utilisation hours.
+
+    Returns
+    -------
+    Returns
+    -------
+    avail_bid : float
+        Availability bid.
+    util_bid : float
+        Utilisation bid.
+    weight : float
+        Corresponding bid weighting.
+
+    """
+    util_bid = tot_SRMC
+    remaining_tcv = tcv - util_bid
+    weight = util_bid / tcv
+    avail_bid = ((remaining_tcv * exp_util_hrs * cap) 
+                 / cap 
+                 / tot_avail_hrs)
+    
+    # don't think it's possible to ensure bids stay within ceiling price
+    # as util is defined by the marginal cost of delivery. If this is
+    # higher than the ceiling price, I don't think you can achieve what 
+    # this function sets out to achieve. Might look something like this:
+    
+    # util = np.min(tot_SRMC, util_max)
+    # avail, weight = calc_avail_bid(exp_util_hrs, util)
+    
+    
+    return avail_bid, util_bid, weight
 
 def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_cost,
                tot_hrs = tot_avail_hrs):
@@ -392,3 +434,11 @@ if __name__ == "__main__":
     analysis = profit_vs_expected_util(weight=0.5)
     plot_weight_vs_actual(analysis, 3)
     plot_exp_vs_actual(analysis, 0.5)
+    ## independent scenario
+    # this ensures profit is independent of actual hours vs expected utilisation.
+    bids = inde_maxTCV(exp_util_hrs)
+    inde_df = calc_costs(cap, bids[0], bids[1],
+                              tot_fixed, tot_SRMC)[1]
+    exp_profit = inde_df["Profit (£)"][inde_df["Utilisation hrs"]==exp_util_hrs].values[0]
+    print("Middle profit: £{:0.2f}".format(exp_profit))
+    
