@@ -19,6 +19,7 @@ server = app.server
 # TODO: Finalise docstring for formulae
 # TODO: Streamline function input for dash callback usage (disconnect in needs from SW python code)
 # TODO: Correct for util/avail bid vs ceil
+# TODO: Properly comment all code
 def Header(app):
     return html.Div([get_header(app), html.Br([])])
 
@@ -212,7 +213,7 @@ def profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, a
 
 
 def plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight):
-    weight_range = np.linspace(0.0, 1.0, profits.shape[1])
+    weight_range = np.round(np.linspace(0.0, 1.0, profits.shape[1]), decimals=4)
     weight_index = np.where(weight_range == weight)
 
     data = profits[:, weight_index[0][0], :]
@@ -241,6 +242,108 @@ def plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight):
     fig.update_xaxes(title_text="Actual Utilisation Hours",
                      nticks=int(tot_hrs + 1),
                      range=[-0.5, tot_hrs + 0.5])
+    return fig
+
+
+def plot_weight_vs_act_heatmap_plotly(profits, expt_hrs, tot_hrs, util_ceil):
+    exp_range = np.round(np.arange(0.0, tot_hrs + 1, 1.0), decimals=1)
+    exp_index = np.where(exp_range == expt_hrs)
+
+    data = profits[exp_index[0][0], :, :]
+
+    # using graph_objects, i can't work out how to add annotations in squares
+    # think it shoud be the text argument but that doesn't work.
+
+    # also want to add secondary axis which uses different 'unit'.
+    # e.g. weight 0 - 1 can also be expressed as utilisation bid 0 - util_max.
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # this first one just makes the secondary y axis appear
+    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_hrs + 1, 1.0),
+                             y=np.linspace(0.0, util_ceil, profits.shape[1]),
+                             z=data,
+                             colorscale='RdBu',
+                             zmid=0,
+                             text=data,
+                             colorbar={"title": 'Profit (£)'},
+                             ), secondary_y=True)
+
+    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_hrs + 1, 1.0),
+                             y=np.linspace(0.0, 1.0, profits.shape[1]),
+                             z=data,
+                             colorscale='RdBu',
+                             zmid=0,
+                             text=data,
+                             colorbar={"title": 'Profit (£)'}))
+    fig.add_vrect(x0=expt_hrs - 0.5, x1=expt_hrs + 0.5, line_width=1)
+
+    fig.update_yaxes(title_text="Bid weighting")
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_hrs + 1),
+                     range=[0, tot_hrs])
+    fig.update_yaxes(title_text="Utilisation Bid", secondary_y=True)
+
+    return fig
+
+
+def profit_vs_actual_plotly(tot_tcv, expt_hrs, tot_hrs, asset_effic, asset_cap, energy_cost, duos_green,
+                            duos_red, lcos, util_bid, util_ceil, avail_bid, avail_ceil, persn_cost_hrlyrate,
+                            persn_cost_fixed, persn_cost_marg):
+    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
+                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+
+    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 0.0)
+    max_avail_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
+                                  persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+
+    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 1.0)
+    max_util_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
+                                 persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+
+    user_def_prof = calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate,
+                               persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+
+    data = pd.DataFrame({"max availability": max_avail_profit,
+                         "max utilisation": max_util_profit,
+                         "user defined": user_def_prof},
+                        index=np.arange(0.0, tot_hrs + 1, 1.0))
+
+    fig = px.line(data, x=data.index, y=["max availability",
+                                         "max utilisation",
+                                         "user defined"],
+                  width=1150, height=800)
+
+    fig.update_yaxes(title_text="Profit (£)")
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_hrs + 1),
+                     range=[0, tot_hrs])
+    fig.add_vline(x=expt_hrs, fillcolor='black')
+    fig.add_vrect(x0=0, x1=expt_hrs,
+                  annotation_text="""
+              If expecting to be under-utilised, <br> 
+              weight bid towards availability to <br>
+              increase profit""",
+                  annotation_position="top right",
+                  annotation_font_size=10,
+                  fillcolor="blue", opacity=0.1, line_width=0)
+    fig.add_vrect(x0=expt_hrs, x1=tot_hrs,
+                  annotation_text="""
+              If expecting to be over-utilised, <br> 
+              weight bid towards utilisation to <br>
+              increase profit""",
+                  annotation_position="top left",
+                  annotation_font_size=10,
+                  fillcolor="red", opacity=0.1, line_width=0)
+    fig.update_layout(legend_title_text='Bid Weighting Scenario')
+    fig.update_layout(legend_title_font_size=12)
+    fig.update_layout(legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=-0.15,
+        xanchor="right",
+        x=0.76
+    ))
+
     return fig
 
 
@@ -295,52 +398,6 @@ overview = dbc.Card(
                                 style={
                                     "padding-bottom": "50px"
                                 }
-                            ),
-                            # Further Information
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.H6(
-                                                ["Why this tool?"],
-                                                className="subtitle padded"
-                                            ),
-                                            html.P(
-                                                [
-                                                    "TO COMPLETE"
-                                                ],
-                                                className="paratext"
-                                            ),
-                                        ],
-                                        className="six columns",
-                                        style={
-                                            'padding-right': '35px'
-                                        }
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.H6(
-                                                "Main Analysis Steps",
-                                                className="subtitle padded",
-                                            ),
-                                            html.P(
-                                                [
-                                                    "TO COMPLETE"
-                                                ],
-                                                className="paratext"
-                                            ),
-                                        ],
-                                        className="six columns",
-                                        style={
-                                            'padding-left': '35px'
-                                        }
-                                    ),
-                                ],
-                                className="row",
-                                style={
-                                    "margin-bottom": "15px",
-                                    "padding-bottom": "50px"
-                                },
                             ),
                             # Asset config. information
                             html.Div(
@@ -415,7 +472,7 @@ overview = dbc.Card(
                                     'padding-bottom': '30px'
                                 }
                             ),
-                            # TCV and Avail. Bid
+                            # TCV and Avail. Ceil
                             html.Div(
                                 [
                                     # TCV
@@ -475,13 +532,13 @@ overview = dbc.Card(
                                             html.P(
                                                 [
                                                     html.Span(
-                                                        "Availability Ceiling"
+                                                        "Availability Ceiling (£/kW/h)"
                                                     ),
                                                 ],
                                                 className='paratext'
                                             ),
                                         ],
-                                        className="three columns",
+                                        className="four columns",
                                         style={
                                             'padding-left': '60px',
                                         }
@@ -504,12 +561,12 @@ overview = dbc.Card(
                                                 }
                                             ),
                                         ],
-                                        className="three columns"
+                                        className="two columns"
                                     ),
                                 ],
                                 className="row ",
                             ),
-                            # Total Hours
+                            # Total Hours and Util. Ceil
                             html.Div(
                                 [
                                     html.Div(
@@ -571,13 +628,13 @@ overview = dbc.Card(
                                             html.P(
                                                 [
                                                     html.Span(
-                                                        "Utilisation Ceiling"
+                                                        "Utilisation Ceiling (£/kWh)"
                                                     ),
                                                 ],
                                                 className='paratext'
                                             ),
                                         ],
-                                        className="three columns",
+                                        className="four columns",
                                         style={
                                             'padding-left': '60px',
                                         }
@@ -600,7 +657,7 @@ overview = dbc.Card(
                                                 }
                                             ),
                                         ],
-                                        className="three columns"
+                                        className="two columns"
                                     ),
                                 ],
                                 className="row ",
@@ -620,9 +677,10 @@ overview = dbc.Card(
                                     'padding-top': '30px'
                                 }
                             ),
-                            # Asset Capacity
+                            # Asset Capacity and Cost of Elec.
                             html.Div(
                                 [
+                                    # Asset Capacity
                                     html.Div(
                                         [
                                             html.P(
@@ -653,25 +711,61 @@ overview = dbc.Card(
                                         ],
                                         className="three columns"
                                     ),
+                                    # Cost of Elec.
+                                    html.Div(
+                                        [
+                                            html.P(
+                                                [
+                                                    "Cost of Energy (£/kWh)"
+                                                ],
+                                                className="paratext"
+                                            ),
+                                        ],
+                                        className="four columns",
+                                        style={
+                                            'padding-left': '60px',
+                                        }
+                                    ),
+                                    html.Div(
+                                        [
+                                            dcc.Input(
+                                                id="energy-cost",
+                                                type="number",
+                                                min=0,
+                                                max=1,
+                                                step=0.001,
+                                                value=0.120,
+                                                style={
+                                                    'fontFamily': "avenir",
+                                                    'fontSize': '16px',
+                                                    'color': '#1A2542',
+                                                    'width': '100px',
+                                                    'text-align': 'center'
+                                                }
+                                            ),
+                                        ],
+                                        className="two columns"
+                                    ),
                                 ],
                                 className="row ",
                             ),
-                            # DUoS (red and green)
+                            # DUoS (red and green) and LCOS
                             html.Div(
                                 [
+                                    # DUoS
                                     html.Div(
                                         [
                                             html.P(
                                                 [
                                                     html.Span(
-                                                        "DUoS (left: red, right: green) *", id="duos-tooltip"
+                                                        "DUoS (£) *", id="duos-tooltip"
                                                     ),
                                                 ],
                                                 className='paratext'
                                             ),
                                             # TODO: Get to work in styles sheet
                                             dbc.Tooltip(
-                                                "Extremes of DUoS rates",
+                                                "Extremes of DUoS rates. Left: Red; Right: Green",
                                                 target="duos-tooltip",
                                                 placement="top",
                                                 className="paratext",
@@ -726,59 +820,20 @@ overview = dbc.Card(
                                         ],
                                         className="three columns",
                                     ),
-                                ],
-                                className="row ",
-                            ),
-                            # Cost of Elec.
-                            html.Div(
-                                [
+                                    # LCOS
                                     html.Div(
                                         [
                                             html.P(
                                                 [
-                                                    "Cost of Energy (£/kWh)"
+                                                    "LCOS (£/kWh)"
                                                 ],
                                                 className="paratext"
                                             ),
                                         ],
-                                        className="three columns"
-                                    ),
-                                    html.Div(
-                                        [
-                                            dcc.Input(
-                                                id="energy-cost",
-                                                type="number",
-                                                min=0,
-                                                max=1,
-                                                step=0.001,
-                                                value=0.120,
-                                                style={
-                                                    'fontFamily': "avenir",
-                                                    'fontSize': '16px',
-                                                    'color': '#1A2542',
-                                                    'width': '100px',
-                                                    'text-align': 'center'
-                                                }
-                                            ),
-                                        ],
-                                        className="three columns"
-                                    ),
-                                ],
-                                className="row ",
-                            ),
-                            # LCOS
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                [
-                                                    "LCOS"
-                                                ],
-                                                className="paratext"
-                                            ),
-                                        ],
-                                        className="three columns"
+                                        className="four columns",
+                                        style={
+                                            'padding-left': '60px',
+                                        }
                                     ),
                                     html.Div(
                                         [
@@ -789,6 +844,43 @@ overview = dbc.Card(
                                                 max=1,
                                                 step=0.01,
                                                 value=0.03,
+                                                style={
+                                                    'fontFamily': "avenir",
+                                                    'fontSize': '16px',
+                                                    'color': '#1A2542',
+                                                    'width': '100px',
+                                                    'text-align': 'center'
+                                                }
+                                            ),
+                                        ],
+                                        className="two columns"
+                                    ),
+                                ],
+                                className="row ",
+                            ),
+                            # Asset Efficiency
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.P(
+                                                [
+                                                    "Asset Efficiency"
+                                                ],
+                                                className="paratext"
+                                            ),
+                                        ],
+                                        className="three columns"
+                                    ),
+                                    html.Div(
+                                        [
+                                            dcc.Input(
+                                                id="asset-effic",
+                                                type="number",
+                                                min=0,
+                                                max=1,
+                                                step=0.01,
+                                                value=0.90,
                                                 style={
                                                     'fontFamily': "avenir",
                                                     'fontSize': '16px',
@@ -894,284 +986,272 @@ overview = dbc.Card(
                                 ],
                                 className="row ",
                             ),
-                            # Asset Efficiency
+                            # Marginal costs and developer info
                             html.Div(
                                 [
+                                    # Marginal costs printouts
                                     html.Div(
                                         [
-                                            html.P(
+                                            # Marginal Costs Header
+                                            html.Div(
                                                 [
-                                                    "Asset Efficiency"
-                                                ],
-                                                className="paratext"
-                                            ),
-                                        ],
-                                        className="three columns"
-                                    ),
-                                    html.Div(
-                                        [
-                                            dcc.Input(
-                                                id="asset-effic",
-                                                type="number",
-                                                min=0,
-                                                max=1,
-                                                step=0.01,
-                                                value=0.90,
-                                                style={
-                                                    'fontFamily': "avenir",
-                                                    'fontSize': '16px',
-                                                    'color': '#1A2542',
-                                                    'width': '100px',
-                                                    'text-align': 'center'
-                                                }
-                                            ),
-                                        ],
-                                        className="three columns"
-                                    ),
-                                ],
-                                className="row ",
-                            ),
-                            # Marginal Costs Header
-                            html.Div(
-                                [
-                                    html.B(
-                                        [
-                                            "Marginal Costs"
-                                        ],
-                                        className="paratextital",
-                                    ),
-                                ],
-                                style={
-                                    'padding-bottom': '30px',
-                                    'padding-top': '30px'
-                                }
-                            ),
-                            # Marginal energy costs (utilisation)
-                            # Energy util costs
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                [
-                                                    html.Span(
-                                                        "Energy Cost of Utilisation (£/kWh) *", id="marg-util-tooltip"
+                                                    html.B(
+                                                        [
+                                                            "Marginal Costs"
+                                                        ],
+                                                        className="paratextital",
                                                     ),
                                                 ],
-                                                className='paratext'
-                                            ),
-                                            dbc.Tooltip(
-                                                "Includes arbitrage between high and low DUOS. \
-                                                Also assumes that the site never exports.",
-                                                target="marg-util-tooltip",
-                                                placement="top",
-                                                className="paratext",
                                                 style={
-                                                    "background-color": "#3D4E68",
-                                                    "color": "white",
-                                                    'width': '300px',
-                                                    'text-align': 'center',
-                                                    'align-items': 'center',
-                                                    'border-radius': '30px',
-                                                    'padding-top': '5px',
-                                                    'padding-left': '15px',
-                                                    'padding-right': '15px',
-                                                    'padding-bottom': '5px',
+                                                    'padding-bottom': '30px',
+                                                    'padding-top': '30px'
+                                                }
+                                            ),
+                                            # Marginal energy costs (utilisation)
+                                            # Energy util costs
+                                            html.Div(
+                                                [
+                                                    html.Div(
+                                                        [
+                                                            html.P(
+                                                                [
+                                                                    html.Span(
+                                                                        "Energy Cost of Utilisation (£/kWh) *",
+                                                                        id="marg-util-tooltip"
+                                                                    ),
+                                                                ],
+                                                                className='paratext'
+                                                            ),
+                                                            dbc.Tooltip(
+                                                                "Includes arbitrage between high and low DUOS. \
+                                                                Also assumes that the site never exports.",
+                                                                target="marg-util-tooltip",
+                                                                placement="top",
+                                                                className="paratext",
+                                                                style={
+                                                                    "background-color": "#3D4E68",
+                                                                    "color": "white",
+                                                                    'width': '300px',
+                                                                    'text-align': 'center',
+                                                                    'align-items': 'center',
+                                                                    'border-radius': '30px',
+                                                                    'padding-top': '5px',
+                                                                    'padding-left': '15px',
+                                                                    'padding-right': '15px',
+                                                                    'padding-bottom': '5px',
 
-                                                }
-                                            ),
-                                        ],
-                                        className="four columns"
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Div(id='marg-energy-util-cost')
-                                        ],
-                                        className="three columns"
-                                    ),
-                                ],
-                                className="row ",
-                            ),
-                            # Hrly util cost
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                [
-                                                    "Hourly Cost of Utilisation (£/h)"
-                                                ],
-                                                className='paratext'
-                                            ),
-                                        ],
-                                        className="four columns"
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Div(id='marg-hrly-util-cost'),
-                                        ],
-                                        className="three columns"
-                                    ),
-                                ],
-                                className="row ",
-                            ),
-                            # Personnel cost
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                [
-                                                    "Personnel Cost of Utilisation (£/kWh)"
-                                                ],
-                                                className='paratext'
-                                            ),
-                                        ],
-                                        className="four columns"
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Div(id='marg-persn-cost'),
-                                        ],
-                                        className="three columns"
-                                    ),
-                                ],
-                                className="row ",
-                            ),
-                            # Total marg util cost
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                [
-                                                    html.Span(
-                                                        "Total Marginal Costs (£/kWh) *",
-                                                        id="marg-tot-tooltip"
-                                                    ),
-                                                ],
-                                                className='paratext'
-                                            ),
-                                            dbc.Tooltip(
-                                                "This needs to be lower than TCV if any profit is to be made \
-                                                through utilisation stratgey, or, it represents the \
-                                                minimum utilisation part of a bid",
-                                                target="marg-tot-tooltip",
-                                                placement="top",
-                                                className="paratext",
-                                                style={
-                                                    "background-color": "#3D4E68",
-                                                    "color": "white",
-                                                    'width': '300px',
-                                                    'text-align': 'center',
-                                                    'align-items': 'center',
-                                                    'border-radius': '30px',
-                                                    'padding-top': '5px',
-                                                    'padding-left': '15px',
-                                                    'padding-right': '15px',
-                                                    'padding-bottom': '5px',
-                                                }
-                                            ),
-                                        ],
-                                        className="four columns"
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Div(id='tot-marg-cost'),
-                                        ],
-                                        className="three columns"
-                                    ),
-                                ],
-                                className="row ",
-                            ),
-                            # Developer Info
-                            html.Div(
-                                [
-                                    html.H6(
-                                        "Developers",
-                                        className="subtitle padded",
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Div(
-                                                html.Img(
-                                                    src=app.get_asset_url("ScotW.png"),
-                                                    className="headshot",
-                                                    style={
-                                                        'margin-left': '10px'
-                                                    }
-                                                ),
-                                            ),
-                                            html.Div(
-                                                [
-                                                    html.Div(
-                                                        html.P(
-                                                            "Dr. Scot Wheeler",
-                                                            className="paratext",
-                                                            style={
-                                                                'margin-left': '15px',
-                                                                'padding-top': '0px'
-                                                            }
-                                                        ),
+                                                                }
+                                                            ),
+                                                        ],
+                                                        className="six columns"
                                                     ),
                                                     html.Div(
-                                                        html.A(
-                                                            html.Img(
-                                                                src=app.get_asset_url("email_icon.png"),
-                                                                className="email-icon"
-                                                            ), href='mailto:scot.wheeler@eng.ox.ac.uk',
-                                                            target="_blank"
-                                                        )
-                                                    )
-                                                ]
-                                            )
-                                        ],
-                                        style={'display': 'inline-block'}
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Div(
-                                                html.Img(
-                                                    src=app.get_asset_url("MasaoA.png"),
-                                                    className="headshot",
-                                                    style={
-                                                        'margin-left': '10px'
-                                                    }
-                                                ),
+                                                        [
+                                                            html.Div(id='marg-energy-util-cost')
+                                                        ],
+                                                        className="six columns"
+                                                    ),
+                                                ],
+                                                className="row ",
                                             ),
+                                            # Hrly util cost
                                             html.Div(
                                                 [
                                                     html.Div(
-                                                        html.P(
-                                                            "Dr. Masaō Ashtine",
-                                                            className="paratext",
-                                                            style={
-                                                                'margin-left': '15px',
-                                                                'padding-top': '0px'
-                                                            }
-                                                        ),
+                                                        [
+                                                            html.P(
+                                                                [
+                                                                    "Hourly Cost of Utilisation (£/h)"
+                                                                ],
+                                                                className='paratext'
+                                                            ),
+                                                        ],
+                                                        className="six columns"
                                                     ),
                                                     html.Div(
-                                                        html.A(
-                                                            html.Img(
-                                                                src=app.get_asset_url("email_icon.png"),
-                                                                className="email-icon"
-                                                            ), href='mailto:masao.ashtine@eng.ox.ac.uk',
-                                                            target="_blank"
-                                                        )
-                                                    )
-                                                ]
-                                            )
+                                                        [
+                                                            html.Div(id='marg-hrly-util-cost'),
+                                                        ],
+                                                        className="six columns"
+                                                    ),
+                                                ],
+                                                className="row ",
+                                            ),
+                                            # Personnel cost
+                                            html.Div(
+                                                [
+                                                    html.Div(
+                                                        [
+                                                            html.P(
+                                                                [
+                                                                    "Personnel Cost of Utilisation (£/kWh)"
+                                                                ],
+                                                                className='paratext'
+                                                            ),
+                                                        ],
+                                                        className="six columns"
+                                                    ),
+                                                    html.Div(
+                                                        [
+                                                            html.Div(id='marg-persn-cost'),
+                                                        ],
+                                                        className="six columns"
+                                                    ),
+                                                ],
+                                                className="row ",
+                                            ),
+                                            # Total marg util cost
+                                            html.Div(
+                                                [
+                                                    html.Div(
+                                                        [
+                                                            html.P(
+                                                                [
+                                                                    html.Span(
+                                                                        "Total Marginal Costs (£/kWh) *",
+                                                                        id="marg-tot-tooltip"
+                                                                    ),
+                                                                ],
+                                                                className='paratext'
+                                                            ),
+                                                            dbc.Tooltip(
+                                                                "This needs to be lower than TCV if any profit is to be made \
+                                                                through utilisation stratgey, or, it represents the \
+                                                                minimum utilisation part of a bid",
+                                                                target="marg-tot-tooltip",
+                                                                placement="top",
+                                                                className="paratext",
+                                                                style={
+                                                                    "background-color": "#3D4E68",
+                                                                    "color": "white",
+                                                                    'width': '300px',
+                                                                    'text-align': 'center',
+                                                                    'align-items': 'center',
+                                                                    'border-radius': '30px',
+                                                                    'padding-top': '5px',
+                                                                    'padding-left': '15px',
+                                                                    'padding-right': '15px',
+                                                                    'padding-bottom': '5px',
+                                                                }
+                                                            ),
+                                                        ],
+                                                        className="six columns"
+                                                    ),
+                                                    html.Div(
+                                                        [
+                                                            html.Div(id='tot-marg-cost'),
+                                                        ],
+                                                        className="six columns"
+                                                    ),
+                                                ],
+                                                className="row ",
+                                            ),
+                                        ],
+                                        className="six columns"
+                                    ),
+                                    # Developer Info
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.H6(
+                                                        "Developers",
+                                                        className="paratext",
+                                                        style={
+                                                            'color': '#ea8f32',
+                                                            'padding-bottom': '20px'
+                                                        }
+                                                    ),
+                                                    html.Div(
+                                                        [
+                                                            html.Div(
+                                                                html.Img(
+                                                                    src=app.get_asset_url("ScotW.png"),
+                                                                    className="headshot",
+                                                                    style={
+                                                                        'margin-left': '15px'
+                                                                    }
+                                                                ),
+                                                            ),
+                                                            html.Div(
+                                                                [
+                                                                    html.Div(
+                                                                        html.P(
+                                                                            "Dr. Scot Wheeler",
+                                                                            className="paratext",
+                                                                            style={
+                                                                                'margin-left': '15px',
+                                                                                'padding-top': '0px'
+                                                                            }
+                                                                        ),
+                                                                    ),
+                                                                    html.Div(
+                                                                        html.A(
+                                                                            html.Img(
+                                                                                src=app.get_asset_url("email_icon.png"),
+                                                                                className="email-icon"
+                                                                            ), href='mailto:scot.wheeler@eng.ox.ac.uk',
+                                                                            target="_blank"
+                                                                        )
+                                                                    )
+                                                                ]
+                                                            )
+                                                        ],
+                                                        style={'display': 'inline-block'}
+                                                    ),
+                                                    html.Div(
+                                                        [
+                                                            html.Div(
+                                                                html.Img(
+                                                                    src=app.get_asset_url("MasaoA.png"),
+                                                                    className="headshot",
+                                                                    style={
+                                                                        'margin-left': '15px'
+                                                                    }
+                                                                ),
+                                                            ),
+                                                            html.Div(
+                                                                [
+                                                                    html.Div(
+                                                                        html.P(
+                                                                            "Dr. Masaō Ashtine",
+                                                                            className="paratext",
+                                                                            style={
+                                                                                'margin-left': '15px',
+                                                                                'padding-top': '0px'
+                                                                            }
+                                                                        ),
+                                                                    ),
+                                                                    html.Div(
+                                                                        html.A(
+                                                                            html.Img(
+                                                                                src=app.get_asset_url("email_icon.png"),
+                                                                                className="email-icon"
+                                                                            ), href='mailto:masao.ashtine@eng.ox.ac.uk',
+                                                                            target="_blank"
+                                                                        )
+                                                                    )
+                                                                ]
+                                                            )
 
+                                                        ],
+                                                        style={'display': 'inline-block'}
+                                                    )
+                                                ],
+                                                className="row",
+                                                style={
+                                                    "padding-bottom": "50px",
+                                                    "padding-top": "50px"
+                                                }
+                                            ),
                                         ],
-                                        style={'display': 'inline-block'}
-                                    )
+                                        className="six columns",
+                                        style={
+                                            'text-align': 'center'
+                                        }
+                                    ),
                                 ],
-                                className="row",
-                                style={
-                                    "padding-bottom": "50px",
-                                    "padding-top": "50px"
-                                }
+                                className="row"
                             ),
                             # Credits
                             html.Div(
@@ -1394,6 +1474,7 @@ bidAnalysis = dbc.Card(
                             html.Div(id='exceed-warning'),
 
                             # Plot of Profit vs Actual Hours
+                            # TODO: We need a right up (small) of how to read this plot
                             html.Div(id='profit-vs-actual-plot'),
 
                             # Data table Preample
@@ -1530,7 +1611,34 @@ bidAnalysis = dbc.Card(
                             html.Div(id='maxout_tcv_bids'),
 
                             # Heatmap of expected vs actual hours and profit
-                            html.Div(id='expt-vs-actual-heatmap'),
+                            # TODO: Need a write-up (small) on how to read these plots
+                            html.Details(
+                                [
+                                    html.Summary('Explore: Heatmap of Expected vs Actual Utilisation Hours '
+                                                 'with Profit (£)'),
+                                    html.Div(id='expt-vs-actual-heatmap'),
+                                ],
+                                className="paratext",
+                                style={
+                                    'color': '#ea8f32',
+                                    'text-align': 'center'
+                                }
+                            ),
+                            # Heatmap of weight vs actual hours and profit
+                            html.Details(
+                                [
+                                    html.Summary('Explore: Heatmap of Bid Weight vs Actual Utilisation Hours '
+                                                 'with Profit (£)'),
+                                    html.Div(id='weight-vs-actual-heatmap'),
+                                ],
+                                className="paratext",
+                                style={
+                                    'color': '#ea8f32',
+                                    'text-align': 'center',
+                                    'padding-top': '30px',
+                                    'padding-bottom': '100px'
+                                }
+                            ),
                         ],
                         className="sub_page",
                     ),
@@ -2471,91 +2579,16 @@ def max_bid_calcs(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, u
     return max_bids, exceed_warning
 
 
-@app.callback(Output('profit-vs-actual-plot', 'children'),
+@app.callback([Output('expt-vs-actual-heatmap', 'children'),
+               Output('weight-vs-actual-heatmap', 'children'),
+               Output('profit-vs-actual-plot', 'children')],
               [Input('tot-hrs', 'value'),
                Input('tot-tcv', 'value'),
                Input('expt-hrs', 'value'),
+               Input('avail-ceil', 'value'),
                Input('avail-bid', 'value'),
-               Input('avail-ceil', 'value'),
+               Input('util-ceil', 'value'),
                Input('util-bid', 'value'),
-               Input('util-ceil', 'value'),
-               Input('duos-red', 'value'),
-               Input('duos-green', 'value'),
-               Input('energy-cost', 'value'),
-               Input('asset-effic', 'value'),
-               Input('asset-cap', 'value'),
-               Input('lcos', 'value'),
-               Input('persn-cost-hrlyrate', 'value'),
-               Input('persn-cost-fixed', 'value'),
-               Input('persn-cost-marg', 'value')])
-def profit_vs_actual_plot(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util_ceil, duos_red,
-                          duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
-                          persn_cost_fixed, persn_cost_marg):
-
-    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
-
-    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 0.0)
-    max_avail_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
-                                  persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
-
-    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 1.0)
-    max_util_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
-                                 persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
-
-    user_def_prof = calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate,
-                               persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
-
-    data = pd.DataFrame({"max availability": max_avail_profit,
-                         "max utilisation": max_util_profit,
-                         "user defined": user_def_prof},
-                        index=np.arange(0.0, tot_hrs+1, 1.0))
-
-    fig = px.line(data, x=data.index, y=["max availability",
-                                         "max utilisation",
-                                         "user defined"],
-                  width=1150, height=800)
-
-    fig.update_yaxes(title_text="Profit (£)")
-    fig.update_xaxes(title_text="Actual Utilisation Hours",
-                     nticks=int(tot_hrs + 1),
-                     range=[0, tot_hrs])
-    fig.add_vline(x=expt_hrs, fillcolor='black')
-    fig.add_vrect(x0=0, x1=expt_hrs,
-                  annotation_text="""
-              If expecting to be under-utilised, <br> 
-              weight bid towards availability to <br>
-              increase profit""",
-                  annotation_position="top right",
-                  annotation_font_size=10,
-                  fillcolor="blue", opacity=0.1, line_width=0)
-    fig.add_vrect(x0=expt_hrs, x1=tot_hrs,
-                  annotation_text="""
-              If expecting to be over-utilised, <br> 
-              weight bid towards utilisation to <br>
-              increase profit""",
-                  annotation_position="top left",
-                  annotation_font_size=10,
-                  fillcolor="red", opacity=0.1, line_width=0)
-    fig.update_layout(legend_title_text='Bid Weighting Scenario')
-    fig.update_layout(legend_title_font_size=12)
-    fig.update_layout(legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=-0.15,
-        xanchor="right",
-        x=0.76
-    ))
-
-    return dcc.Graph(figure=fig)
-
-
-@app.callback(Output('expt-vs-actual-heatmap', 'children'),
-              [Input('tot-hrs', 'value'),
-               Input('tot-tcv', 'value'),
-               Input('expt-hrs', 'value'),
-               Input('avail-ceil', 'value'),
-               Input('util-ceil', 'value'),
                Input('duos-red', 'value'),
                Input('duos-green', 'value'),
                Input('energy-cost', 'value'),
@@ -2566,18 +2599,30 @@ def profit_vs_actual_plot(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, uti
                Input('persn-cost-fixed', 'value'),
                Input('persn-cost-marg', 'value'),
                Input('weight-slider', 'value')])
-def exp_vs_act_heatmap(tot_hrs, tot_tcv, expt_hrs, avail_ceil, util_ceil, duos_red,
-                       duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
-                       persn_cost_fixed, persn_cost_marg, weight):
+def heatmaps_plots(tot_hrs, tot_tcv, expt_hrs, avail_ceil, avail_bid, util_ceil, util_bid, duos_red,
+             duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
+             persn_cost_fixed, persn_cost_marg, weight):
 
+    # TODO: Plotting colours need to be more consistent in all plots.
     tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
                              duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+
     profits = profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, persn_cost_fixed,
                                       persn_cost_hrlyrate, tot_marg)
 
-    fig = plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight)
+    # Various figures for visualisation
+    expt_vs_actual_heatmap = plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight)
+    weight_vs_actual_heatmap = plot_weight_vs_act_heatmap_plotly(profits, expt_hrs, tot_hrs, util_ceil)
 
-    return dcc.Graph(figure=fig)
+    # TODO: Yes, I know, this is messy and certainly not efficent! Well be corrected with module pairing
+    profit_vs_actual_plot = profit_vs_actual_plotly(tot_tcv, expt_hrs, tot_hrs, asset_effic, asset_cap,
+                                                    energy_cost, duos_green, duos_red, lcos, util_bid,
+                                                    util_ceil, avail_bid, avail_ceil, persn_cost_hrlyrate,
+                                                    persn_cost_fixed, persn_cost_marg)
+
+    return dcc.Graph(figure=expt_vs_actual_heatmap), \
+           dcc.Graph(figure=weight_vs_actual_heatmap), \
+           dcc.Graph(figure=profit_vs_actual_plot)
 
 
 @app.callback(Output('debug-submission', 'children'),
