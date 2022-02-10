@@ -62,7 +62,7 @@ other_SRMC = 0.0            # £/kWh
 tot_avail_hrs = 20.0        # hours available in the service auction
 service_type = 'turn-up'    # the type of service
 tcv = 0.30                  # £/kWh
-avail_ceil = 0.045          # £/kW
+avail_ceil = 0.045          # £/kW/h
 util_ceil = 0.30            # £/kWh
 exp_util_hrs = 6.0          # hrs - expected utilisation hours
 hrs_per_service_win = 4.0   # hrs per service window e.g. 4 if window is 3-7pm every day
@@ -418,7 +418,7 @@ def plot_exp_vs_actual(profits, weight):
     
 def plot_exp_vs_act_heatmap_plotly(profits, weight):
     
-    weight_range = np.linspace(0.0, 1.0, profits.shape[1])
+    weight_range = np.round(np.linspace(0.0, 1.0, profits.shape[1]),decimals=4)
     weight_index = np.where(weight_range == weight)
 
     data = profits[:,weight_index[0][0],:]
@@ -464,7 +464,7 @@ def plot_exp_vs_act_heatmap_plotly(profits, weight):
     
 def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs):
     
-    exp_range = np.arange(0.0, tot_avail_hrs+1, 1.0)
+    exp_range = np.round(np.arange(0.0, tot_avail_hrs+1, 1.0), decimals=1)
     exp_index = np.where(exp_range == exp_util_hrs)
 
     data = profits[exp_index[0][0],:,:]
