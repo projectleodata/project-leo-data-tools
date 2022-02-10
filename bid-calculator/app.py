@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 import dash
 import yagmail
-import pandas as pd
 import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from dash import html, dash_table, dcc
 import dash_bootstrap_components as dbc
+from plotly.subplots import make_subplots
 from dash.exceptions import PreventUpdate
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output
 
 app = dash.Dash(__name__, meta_tags=[{"name": "viewport", "content": "width=device-width"}],
                 suppress_callback_exceptions=True)
@@ -147,7 +150,8 @@ def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_f
     """
     Calculates the costs of participation, revenue and profit
     """
-    # Create starting lists
+    # Create starting lists This is adapted from the original function to remove the isinstance and list checks and
+    # this can be constrained at point of user input. List input avoided for simplification of tool in v1.0
     util_hours = np.arange(0, (tot_hrs + 1), 1.0)
     avail_bids = [avail_bid] * len(util_hours)
     util_bids = [util_bid] * len(util_hours)
@@ -158,7 +162,7 @@ def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_f
     marginal_cost = tot_marg * energy
     fixed_cost = (persn_cost_fixed / 60) * persn_cost_hrlyrate
     fixed_cost = np.ones(util_hours.shape) * fixed_cost
-    tot_cost = tot_marg + fixed_cost
+    tot_cost = marginal_cost + fixed_cost
     revenue = (util_bids * energy) + (avail_bid * asset_cap * tot_hrs)
     profit = revenue - tot_cost
     tcv = revenue / energy
@@ -205,6 +209,39 @@ def profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, a
             revenues[i][j] = costs[7]
 
     return profits
+
+
+def plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight):
+    weight_range = np.linspace(0.0, 1.0, profits.shape[1])
+    weight_index = np.where(weight_range == weight)
+
+    data = profits[:, weight_index[0][0], :]
+
+    # using graph_objects, i can't work out how to add annotations in squares
+    # think it shoud be the text argument tbut thtat doesn't work.
+    fig = make_subplots()
+    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_hrs + 1, 1.0),
+                             y=np.arange(0.0, tot_hrs + 1, 1.0),
+                             z=data,
+                             colorscale='RdBu',
+                             zmid=0,
+                             text=data,
+                             colorbar={"title": 'Profit (£)'}))
+
+    fig.add_shape(
+        type='rect',
+        x0=expt_hrs - 0.5, x1=expt_hrs + 0.5, y0=expt_hrs - 0.5, y1=expt_hrs + 0.5,
+        xref='x', yref='y',
+        line_color='black'
+    )
+
+    fig.update_yaxes(title_text="Expected Utilisation Hours",
+                     nticks=int(tot_hrs + 1),
+                     range=[-0.5, tot_hrs + 0.5])
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_hrs + 1),
+                     range=[-0.5, tot_hrs + 0.5])
+    return fig
 
 
 overview = dbc.Card(
@@ -1185,7 +1222,8 @@ bidAnalysis = dbc.Card(
                                                     "competitive market, while remaining below the TCV, will give you "
                                                     "the best strategy to maximise profits. Use the fields below to "
                                                     "determine how varying Availability and Utilisation affect your "
-                                                    "options."
+                                                    "options (default values are the ceiling for "
+                                                    "Availability and £0 for Utilisation)."
                                                 ],
                                                 className="paratext"
                                             ),
@@ -1198,7 +1236,7 @@ bidAnalysis = dbc.Card(
                                 ],
                                 className="row ",
                             ),
-                            # Expected Hours entry
+                            # Expected hours (expt hrs) label
                             html.Div(
                                 [
                                     html.P(
@@ -1235,6 +1273,7 @@ bidAnalysis = dbc.Card(
                                     'padding-right': '70px'
                                 }
                             ),
+                            # Expt hrs input field
                             html.Div(
                                 [
                                     dcc.Input(
@@ -1288,7 +1327,7 @@ bidAnalysis = dbc.Card(
                                                         type="number",
                                                         min=0,
                                                         step=0.001,
-                                                        value=0,
+                                                        value=0.045,
                                                         style={
                                                             'fontFamily': "avenir",
                                                             'fontSize': '16px',
@@ -1317,7 +1356,7 @@ bidAnalysis = dbc.Card(
                                                         type="number",
                                                         min=0,
                                                         step=0.001,
-                                                        value=0,
+                                                        value=0.0,
                                                         style={
                                                             'fontFamily': "avenir",
                                                             'fontSize': '16px',
@@ -1353,6 +1392,9 @@ bidAnalysis = dbc.Card(
                             # Max Bid readout
                             html.Div(id='max-bids'),
                             html.Div(id='exceed-warning'),
+
+                            # Plot of Profit vs Actual Hours
+                            html.Div(id='profit-vs-actual-plot'),
 
                             # Data table Preample
                             html.Div(
@@ -1421,7 +1463,6 @@ bidAnalysis = dbc.Card(
                                 className="row",
                                 style={
                                     "padding-top": "30px",
-                                    "padding-bottom": "50px"
                                 }
                             ),
                             # Blank row for page padding
@@ -1468,7 +1509,7 @@ bidAnalysis = dbc.Card(
                             html.Div(
                                 [
                                     dcc.Slider(
-                                        0, 1, 0.01,
+                                        0, 1, 0.1,
                                         id='weight-slider',
                                         value=0.50,
                                         marks={
@@ -1487,6 +1528,9 @@ bidAnalysis = dbc.Card(
                             ),
                             # Output of Maxout TCV bid calculations
                             html.Div(id='maxout_tcv_bids'),
+
+                            # Heatmap of expected vs actual hours and profit
+                            html.Div(id='expt-vs-actual-heatmap'),
                         ],
                         className="sub_page",
                     ),
@@ -1626,7 +1670,7 @@ supportingDocumentation = dbc.Card(
                                         [
                                             html.A(
                                                 html.Img(
-                                                    src=app.get_asset_url("Bitbucket.png"),
+                                                    src=app.get_asset_url("LEOGitHub_comp.png"),
                                                     className="supp_reports_large",
                                                     style={
                                                         'margin-top': '80px',
@@ -1635,8 +1679,7 @@ supportingDocumentation = dbc.Card(
                                                         'width': '50%'
                                                     }
                                                 ),
-                                                href='https://www.bitbucket.org/projectleodata/'
-                                                     'project-leo-database/src',
+                                                href='https://github.com/projectleodata/project-leo-data-tools',
                                                 target="_blank",
                                                 style={
                                                     'margin-top': '0px',
@@ -1647,7 +1690,7 @@ supportingDocumentation = dbc.Card(
                                                 [
                                                     'Want to dive deeper into the scripts behind this dashboard? You can click \
                                                     on the image above or the "Source Code" button at the top of the page \
-                                                    to head over to the LEO BitBucket Repository (Restricted Access)'
+                                                    to head over to the LEO GitHub Repository (Restricted Access)'
                                                 ],
                                                 className='paratext',
                                                 style={
@@ -1696,8 +1739,7 @@ debugging = dbc.Card(
                                             ),
                                             html.P(
                                                 [
-                                                    "Error detection is no easy task and as datasets will come in various \
-                                                    sizes, formats, and types, we expect the Data Cleaning Tool to 'break' \
+                                                    "We expect the Bid Analysis Tool to 'break' \
                                                     from time to time as we iron out its development. But breaking things \
                                                     isn't always bad! If you do experience an error, as simple as it may be, \
                                                     you will help us a lot by submitting it here so that we can improve the \
@@ -2252,7 +2294,7 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(expt_hrs)
+                    'filter_query': '{{Utilisation Hours}} = {}'.format(expt_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2414,9 +2456,7 @@ def max_bid_calcs(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, u
                 html.P(
                     [
                         html.Span("Whoops! Your entered {} has exceeded the ceiling of £{:.3f}".format(bid, ceil),
-                                  style={"color": "#ea8f32"}),
-                        "and your maximum Utilisation Bid can be ",
-                        html.Span("£{:.3f} ".format(util_max), style={"color": "#ea8f32"})
+                                  style={"color": "#ffffff"})
                     ],
                     className="paratext"
                 )
@@ -2429,6 +2469,115 @@ def max_bid_calcs(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, u
         )
 
     return max_bids, exceed_warning
+
+
+@app.callback(Output('profit-vs-actual-plot', 'children'),
+              [Input('tot-hrs', 'value'),
+               Input('tot-tcv', 'value'),
+               Input('expt-hrs', 'value'),
+               Input('avail-bid', 'value'),
+               Input('avail-ceil', 'value'),
+               Input('util-bid', 'value'),
+               Input('util-ceil', 'value'),
+               Input('duos-red', 'value'),
+               Input('duos-green', 'value'),
+               Input('energy-cost', 'value'),
+               Input('asset-effic', 'value'),
+               Input('asset-cap', 'value'),
+               Input('lcos', 'value'),
+               Input('persn-cost-hrlyrate', 'value'),
+               Input('persn-cost-fixed', 'value'),
+               Input('persn-cost-marg', 'value')])
+def profit_vs_actual_plot(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util_ceil, duos_red,
+                          duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
+                          persn_cost_fixed, persn_cost_marg):
+
+    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
+                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+
+    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 0.0)
+    max_avail_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
+                                  persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+
+    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 1.0)
+    max_util_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
+                                 persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+
+    user_def_prof = calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate,
+                               persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+
+    data = pd.DataFrame({"max availability": max_avail_profit,
+                         "max utilisation": max_util_profit,
+                         "user defined": user_def_prof},
+                        index=np.arange(0.0, tot_hrs+1, 1.0))
+
+    fig = px.line(data, x=data.index, y=["max availability",
+                                         "max utilisation",
+                                         "user defined"],
+                  width=1150, height=800)
+
+    fig.update_yaxes(title_text="Profit (£)")
+    fig.update_xaxes(title_text="Actual Utilisation Hours",
+                     nticks=int(tot_hrs + 1),
+                     range=[0, tot_hrs])
+    fig.add_vline(x=expt_hrs, fillcolor='black')
+    fig.add_vrect(x0=0, x1=expt_hrs,
+                  annotation_text="""
+              If expecting to be under-utilised, <br> 
+              weight bid towards availability to <br>
+              increase profit""",
+                  annotation_position="top right",
+                  annotation_font_size=10,
+                  fillcolor="blue", opacity=0.1, line_width=0)
+    fig.add_vrect(x0=expt_hrs, x1=tot_hrs,
+                  annotation_text="""
+              If expecting to be over-utilised, <br> 
+              weight bid towards utilisation to <br>
+              increase profit""",
+                  annotation_position="top left",
+                  annotation_font_size=10,
+                  fillcolor="red", opacity=0.1, line_width=0)
+    fig.update_layout(legend_title_text='Bid Weighting Scenario')
+    fig.update_layout(legend_title_font_size=12)
+    fig.update_layout(legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=-0.15,
+        xanchor="right",
+        x=0.76
+    ))
+
+    return dcc.Graph(figure=fig)
+
+
+@app.callback(Output('expt-vs-actual-heatmap', 'children'),
+              [Input('tot-hrs', 'value'),
+               Input('tot-tcv', 'value'),
+               Input('expt-hrs', 'value'),
+               Input('avail-ceil', 'value'),
+               Input('util-ceil', 'value'),
+               Input('duos-red', 'value'),
+               Input('duos-green', 'value'),
+               Input('energy-cost', 'value'),
+               Input('asset-effic', 'value'),
+               Input('asset-cap', 'value'),
+               Input('lcos', 'value'),
+               Input('persn-cost-hrlyrate', 'value'),
+               Input('persn-cost-fixed', 'value'),
+               Input('persn-cost-marg', 'value'),
+               Input('weight-slider', 'value')])
+def exp_vs_act_heatmap(tot_hrs, tot_tcv, expt_hrs, avail_ceil, util_ceil, duos_red,
+                       duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
+                       persn_cost_fixed, persn_cost_marg, weight):
+
+    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
+                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+    profits = profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, persn_cost_fixed,
+                                      persn_cost_hrlyrate, tot_marg)
+
+    fig = plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight)
+
+    return dcc.Graph(figure=fig)
 
 
 @app.callback(Output('debug-submission', 'children'),
