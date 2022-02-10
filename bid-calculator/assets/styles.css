@@ -39,7 +39,7 @@ body {
 }
 
 ::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
-  color: white;
+  color: #a0a3a8;
   font-size: 14px;
   font-family: avenir;
   opacity: 1; /* Firefox */
