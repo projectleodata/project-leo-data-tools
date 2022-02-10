@@ -35,14 +35,14 @@ np.seterr(divide='ignore')
 # Inputs
 # =============================================================================
 #%% asset parameters
-asset_type = 'storage'  # storage/gen/dsr
-cap = 16.0              # kW
-person_rate = 15.0   # £/hour
+asset_type = 'storage'      # storage/gen/dsr
+cap = 16.0                  # kW
+person_rate = 15.0          # £/hour
 
 
 #%% costs
 # fixed costs
-fixed_person_hrs = 10/60 # number of hrs for a person to enter an auction (inc. forecasting of availability)
+fixed_person_hrs = 10/60    # number of hrs for a person to enter an auction (inc. forecasting of availability)
 
 # other fixed costs to be inc. e.g. metering, data storage, installation etc
 other_fixed = 0.0
@@ -50,23 +50,23 @@ other_fixed = 0.0
 # SRMC - marginal costs
 
 # not sure how to generalise DUOS charges as it depends on when the service is delivered vs when the asset recharges
-DUOS_event = 0.055        # £/kWh - DUOS during event
-DUOS_recharge = 0.006      # £/kWh - DUOS outside of event when 'recharge' scheduled
-energy_cost = 0.120     # £/kWh
-LCOS_battery = 0.03     # £/kWh - based on $400 / MWh and 10% of battery associated with flex.
+DUOS_event = 0.055          # £/kWh - DUOS during event
+DUOS_recharge = 0.006       # £/kWh - DUOS outside of event when 'recharge' scheduled
+energy_cost = 0.120         # £/kWh
+LCOS_battery = 0.03         # £/kWh - based on $400 / MWh and 10% of battery associated with flex.
 roundtrip_eff = 0.9
-util_person_hrs = 5/60  # number of hrs for a person to respond to a utilisation instruction (inc. asset dispatch, delivery and data upload)  
-other_SRMC = 0.0        # £/kWh
+util_person_hrs = 5/60      # number of hrs for a person to respond to a utilisation instruction (inc. asset dispatch, delivery and data upload)  
+other_SRMC = 0.0            # £/kWh
 
 #%% market parameters
-tot_avail_hrs = 20.0
-service_type = 'turn-up'
-tcv = 0.30              # £/kWh
-avail_ceil = 0.045      # £/kW
-util_ceil = 0.30        # £/kWh
-exp_util_hrs = 3.0        # hrs - expected utilisation hours
-hrs_per_service_win = 4.0 # hrs per service window e.g. 4 if window is 3-7pm every day
-hrs_per_util = 1.0        # number of hrs in a single utilisation - this is hard to know and could vary between 1 and service window
+tot_avail_hrs = 20.0        # hours available in the service auction
+service_type = 'turn-up'    # the type of service
+tcv = 0.30                  # £/kWh
+avail_ceil = 0.045          # £/kW
+util_ceil = 0.30            # £/kWh
+exp_util_hrs = 6.0          # hrs - expected utilisation hours
+hrs_per_service_win = 4.0   # hrs per service window e.g. 4 if window is 3-7pm every day
+hrs_per_util = 1.0          # number of hrs in a single utilisation - this is hard to know and could vary between 1 and service window
 
 # =============================================================================
 # Calculations
@@ -605,10 +605,19 @@ if __name__ == "__main__":
     print("Independent profit: £{:0.2f}".format(exp_profit))
     
     
-    analysis = profit_vs_expected_util_vs_weight(weight=0.5)
-    plot_exp_vs_act_heatmap_plotly(analysis, 0.5)
-    plot_weight_vs_act_heatmap_plotly(analysis ,exp_util_hrs)
+    # analysis = profit_vs_expected_util_vs_weight(weight=0.5)
+    # plot_exp_vs_act_heatmap_plotly(analysis, 0.5)
+    # plot_weight_vs_act_heatmap_plotly(analysis ,exp_util_hrs)
     
     ## independent scenario
-    bids = inde_maxTCV(exp_util_hrs)
-    profit_vs_actual_plotly(exp_util_hrs, bids[0], bids[1])
+    # bids = inde_maxTCV(exp_util_hrs)
+    # profit_vs_actual_plotly(exp_util_hrs, bids[0], bids[1])
+    
+    
+    ## User defined
+    avail_bid = 0.03
+    util_bid = 0.2
+    user_df = calc_costs(cap, avail_bid, util_bid,
+                              tot_fixed, tot_SRMC)[1]
+    exp_profit = user_df["Profit (£)"][user_df["Utilisation hrs"]==exp_util_hrs].values[0]
+    profit_vs_actual_plotly(exp_util_hrs, avail_bid, util_bid)
