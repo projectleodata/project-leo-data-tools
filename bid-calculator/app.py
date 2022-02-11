@@ -77,7 +77,7 @@ def get_header(app):
 
 # TODO: Does not include 'Other Fixed' at the moment
 def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                  duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg):
+                  duos_red, lcos, person_rate, util_person_hrs):
     """
     Simple function to determine the total marginal cost
 
@@ -87,59 +87,60 @@ def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
     :param duos_green:
     :param duos_red:
     :param lcos:
-    :param persn_cost_hrlyrate:
-    :param persn_cost_marg:
+    :param person_rate:
+    :param util_person_hrs:
 
-    :return: tot_marg
+    :return: tot_SRMC
 
     """
-    marg_util = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
-    hrly_util = persn_cost_hrlyrate * (persn_cost_marg / 60)
-    persn_util = hrly_util / asset_cap
-    tot_marg = marg_util + persn_util
+    # TODO: Does not include hrs_per_util variable as this is assumed to be 1.0
+    energy_SRMC = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
+    hrly_util = person_rate * (util_person_hrs / 60)
+    person_SRMC = hrly_util / asset_cap
+    tot_SRMC = energy_SRMC + person_SRMC
 
-    return tot_marg
+    return tot_SRMC
 
 
-def calc_avail_bid(tot_tcv, expt_hrs, tot_hrs, util_bid, avail_ceil, asset_cap):
+def calc_avail_bid(tcv, exp_util_hrs, tot_avail_hrs, util_bid, avail_ceil, asset_cap):
     """
     Given a utilisation bid, calculate max availability bid and be equal to TCV
     Returns
     """
-    remaining_tcv = tot_tcv - util_bid
-    weight = util_bid / tot_tcv
-    avail_max = ((remaining_tcv * expt_hrs * asset_cap)
+    remaining_tcv = tcv - util_bid
+    weight = util_bid / tcv
+    avail_max = ((remaining_tcv * exp_util_hrs * asset_cap)
                  / asset_cap
-                 / tot_hrs)
+                 / tot_avail_hrs)
     avail = np.min([avail_ceil, avail_max])
 
     return avail, weight
 
 
-def calc_util_bid(tot_tcv, expt_hrs, tot_hrs, avail_bid, util_ceil, asset_cap):
+def calc_util_bid(tcv, exp_util_hrs, tot_avail_hrs, avail_bid, util_ceil, asset_cap):
     """
     Given an availability bid, calculate max utilisation bid and be equal to TCV
     Returns
     """
-    util_max = (((tot_tcv * expt_hrs * asset_cap) - (avail_bid * tot_hrs * asset_cap))
-                / (expt_hrs * asset_cap))
+    util_max = (((tcv * exp_util_hrs * asset_cap) - (avail_bid * tot_avail_hrs * asset_cap))
+                / (exp_util_hrs * asset_cap))
     util = np.min([util_ceil, util_max])
-    weight = util / tot_tcv
+    weight = util / tcv
 
     return util, weight
 
 
-def maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, bid_weight):
+def maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, bid_weight):
     """
     This calculates the availability and utilisation bids to max out the tcv
     for a given expected number of hours of delivery. This can be used to
     replicate Harry Orchards original analysis with bid_weight 0 for
     all availability and 1 for all utilisaton.
     """
-    util_max = bid_weight * tot_tcv
-    avail_max = ((((1 - bid_weight) * tot_tcv) * expt_hrs * asset_cap)
+    util_max = bid_weight * tcv
+    avail_max = ((((1 - bid_weight) * tcv) * exp_util_hrs * asset_cap)
                  / asset_cap
-                 / tot_hrs)
+                 / tot_avail_hrs)
 
     util = np.min([util_max, util_ceil])
     avail = np.min([avail_ceil, avail_max])
@@ -147,24 +148,24 @@ def maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, bid
     return avail, util
 
 
-def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_fixed, tot_marg, tot_hrs):
+def calc_costs(asset_cap, avail_bid, util_bid, person_rate, fixed_person_hrs, tot_SRMC, tot_avail_hrs):
     """
     Calculates the costs of participation, revenue and profit
     """
     # Create starting lists This is adapted from the original function to remove the isinstance and list checks and
     # this can be constrained at point of user input. List input avoided for simplification of tool in v1.0
-    util_hours = np.arange(0, (tot_hrs + 1), 1.0)
+    util_hours = np.arange(0, (tot_avail_hrs + 1), 1.0)
     avail_bids = [avail_bid] * len(util_hours)
     util_bids = [util_bid] * len(util_hours)
 
     # Creating data for the data table columns
     energy = util_hours * asset_cap
-    tot_marg = [tot_marg] * len(util_hours)
-    marginal_cost = tot_marg * energy
-    fixed_cost = (persn_cost_fixed / 60) * persn_cost_hrlyrate
+    tot_SRMC = [tot_SRMC] * len(util_hours)
+    marginal_cost = tot_SRMC * energy
+    fixed_cost = (fixed_person_hrs / 60) * person_rate
     fixed_cost = np.ones(util_hours.shape) * fixed_cost
     tot_cost = marginal_cost + fixed_cost
-    revenue = (util_bids * energy) + (avail_bid * asset_cap * tot_hrs)
+    revenue = (util_bids * energy) + (avail_bid * asset_cap * tot_avail_hrs)
     profit = revenue - tot_cost
     tcv = revenue / energy
 
@@ -188,23 +189,23 @@ def calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate, persn_cost_f
     return cost_matrix, cost_df
 
 
-def profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, persn_cost_fixed,
-                            persn_cost_hrlyrate, tot_marg):
+def profit_vs_expected_util(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, fixed_person_hrs,
+                            person_rate, tot_SRMC):
     """
     Calculate 3D matrix of profit for expected utilisation vs actual
     utilisation for a particular set of bids and strategy weight.
     """
 
-    exp_util_range = np.arange(0.0, tot_hrs + 1, 1.0)
+    exp_util_range = np.arange(0.0, tot_avail_hrs + 1, 1.0)
     weight_range = np.linspace(0.0, 1.0, 11)
 
     profits = np.zeros((len(exp_util_range), len(weight_range), len(exp_util_range)))
     revenues = np.zeros((len(exp_util_range), len(weight_range), len(exp_util_range)))
     for i, exp_util in enumerate(exp_util_range):
         for j, weight in enumerate(weight_range):
-            bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, weight)
+            bids = maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, weight)
             costs = \
-                calc_costs(asset_cap, bids[0], bids[1], persn_cost_fixed / 60, persn_cost_hrlyrate, tot_marg, tot_hrs)[
+                calc_costs(asset_cap, bids[0], bids[1], fixed_person_hrs / 60, person_rate, tot_SRMC, tot_avail_hrs)[
                     0]
             profits[i][j] = costs[8]
             revenues[i][j] = costs[7]
@@ -212,7 +213,7 @@ def profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, a
     return profits
 
 
-def plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight):
+def plot_exp_vs_act_heatmap(tot_avail_hrs, exp_util_hrs, profits, weight):
     weight_range = np.round(np.linspace(0.0, 1.0, profits.shape[1]), decimals=4)
     weight_index = np.where(weight_range == weight)
 
@@ -221,8 +222,8 @@ def plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight):
     # using graph_objects, i can't work out how to add annotations in squares
     # think it shoud be the text argument tbut thtat doesn't work.
     fig = make_subplots()
-    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_hrs + 1, 1.0),
-                             y=np.arange(0.0, tot_hrs + 1, 1.0),
+    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_avail_hrs + 1, 1.0),
+                             y=np.arange(0.0, tot_avail_hrs + 1, 1.0),
                              z=data,
                              colorscale='RdBu',
                              zmid=0,
@@ -231,23 +232,23 @@ def plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight):
 
     fig.add_shape(
         type='rect',
-        x0=expt_hrs - 0.5, x1=expt_hrs + 0.5, y0=expt_hrs - 0.5, y1=expt_hrs + 0.5,
+        x0=exp_util_hrs - 0.5, x1=exp_util_hrs + 0.5, y0=exp_util_hrs - 0.5, y1=exp_util_hrs + 0.5,
         xref='x', yref='y',
         line_color='black'
     )
 
     fig.update_yaxes(title_text="Expected Utilisation Hours",
-                     nticks=int(tot_hrs + 1),
-                     range=[-0.5, tot_hrs + 0.5])
+                     nticks=int(tot_avail_hrs + 1),
+                     range=[-0.5, tot_avail_hrs + 0.5])
     fig.update_xaxes(title_text="Actual Utilisation Hours",
-                     nticks=int(tot_hrs + 1),
-                     range=[-0.5, tot_hrs + 0.5])
+                     nticks=int(tot_avail_hrs + 1),
+                     range=[-0.5, tot_avail_hrs + 0.5])
     return fig
 
 
-def plot_weight_vs_act_heatmap_plotly(profits, expt_hrs, tot_hrs, util_ceil):
-    exp_range = np.round(np.arange(0.0, tot_hrs + 1, 1.0), decimals=1)
-    exp_index = np.where(exp_range == expt_hrs)
+def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs, tot_avail_hrs, util_ceil):
+    exp_range = np.round(np.arange(0.0, tot_avail_hrs + 1, 1.0), decimals=1)
+    exp_index = np.where(exp_range == exp_util_hrs)
 
     data = profits[exp_index[0][0], :, :]
 
@@ -259,7 +260,7 @@ def plot_weight_vs_act_heatmap_plotly(profits, expt_hrs, tot_hrs, util_ceil):
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     # this first one just makes the secondary y axis appear
-    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_hrs + 1, 1.0),
+    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_avail_hrs + 1, 1.0),
                              y=np.linspace(0.0, util_ceil, profits.shape[1]),
                              z=data,
                              colorscale='RdBu',
@@ -268,45 +269,45 @@ def plot_weight_vs_act_heatmap_plotly(profits, expt_hrs, tot_hrs, util_ceil):
                              colorbar={"title": 'Profit (£)'},
                              ), secondary_y=True)
 
-    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_hrs + 1, 1.0),
+    fig.add_trace(go.Heatmap(x=np.arange(0.0, tot_avail_hrs + 1, 1.0),
                              y=np.linspace(0.0, 1.0, profits.shape[1]),
                              z=data,
                              colorscale='RdBu',
                              zmid=0,
                              text=data,
                              colorbar={"title": 'Profit (£)'}))
-    fig.add_vrect(x0=expt_hrs - 0.5, x1=expt_hrs + 0.5, line_width=1)
+    fig.add_vrect(x0=exp_util_hrs - 0.5, x1=exp_util_hrs + 0.5, line_width=1)
 
     fig.update_yaxes(title_text="Bid weighting")
     fig.update_xaxes(title_text="Actual Utilisation Hours",
-                     nticks=int(tot_hrs + 1),
-                     range=[0, tot_hrs])
+                     nticks=int(tot_avail_hrs + 1),
+                     range=[0, tot_avail_hrs])
     fig.update_yaxes(title_text="Utilisation Bid", secondary_y=True)
 
     return fig
 
 
-def profit_vs_actual_plotly(tot_tcv, expt_hrs, tot_hrs, asset_effic, asset_cap, energy_cost, duos_green,
-                            duos_red, lcos, util_bid, util_ceil, avail_bid, avail_ceil, persn_cost_hrlyrate,
-                            persn_cost_fixed, persn_cost_marg):
-    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+def profit_vs_actual_plotly(tcv, exp_util_hrs, tot_avail_hrs, asset_effic, asset_cap, energy_cost, duos_green,
+                            duos_red, lcos, util_bid, util_ceil, avail_bid, avail_ceil, person_rate,
+                            fixed_person_hrs, util_person_hrs):
+    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
+                             duos_red, lcos, person_rate, util_person_hrs)
 
-    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 0.0)
-    max_avail_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
-                                  persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+    bids = maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, 0.0)
+    max_avail_profit = calc_costs(asset_cap, bids[0], bids[1], person_rate,
+                                  fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]["Profit (£)"]
 
-    bids = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, 1.0)
-    max_util_profit = calc_costs(asset_cap, bids[0], bids[1], persn_cost_hrlyrate,
-                                 persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+    bids = maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, 1.0)
+    max_util_profit = calc_costs(asset_cap, bids[0], bids[1], person_rate,
+                                 fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]["Profit (£)"]
 
-    user_def_prof = calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate,
-                               persn_cost_fixed, tot_marg, tot_hrs)[1]["Profit (£)"]
+    user_def_prof = calc_costs(asset_cap, avail_bid, util_bid, person_rate,
+                               fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]["Profit (£)"]
 
     data = pd.DataFrame({"max availability": max_avail_profit,
                          "max utilisation": max_util_profit,
                          "user defined": user_def_prof},
-                        index=np.arange(0.0, tot_hrs + 1, 1.0))
+                        index=np.arange(0.0, tot_avail_hrs + 1, 1.0))
 
     fig = px.line(data, x=data.index, y=["max availability",
                                          "max utilisation",
@@ -315,10 +316,10 @@ def profit_vs_actual_plotly(tot_tcv, expt_hrs, tot_hrs, asset_effic, asset_cap, 
 
     fig.update_yaxes(title_text="Profit (£)")
     fig.update_xaxes(title_text="Actual Utilisation Hours",
-                     nticks=int(tot_hrs + 1),
-                     range=[0, tot_hrs])
-    fig.add_vline(x=expt_hrs, fillcolor='black')
-    fig.add_vrect(x0=0, x1=expt_hrs,
+                     nticks=int(tot_avail_hrs + 1),
+                     range=[0, tot_avail_hrs])
+    fig.add_vline(x=exp_util_hrs, fillcolor='black')
+    fig.add_vrect(x0=0, x1=exp_util_hrs,
                   annotation_text="""
               If expecting to be under-utilised, <br> 
               weight bid towards availability to <br>
@@ -326,7 +327,7 @@ def profit_vs_actual_plotly(tot_tcv, expt_hrs, tot_hrs, asset_effic, asset_cap, 
                   annotation_position="top right",
                   annotation_font_size=10,
                   fillcolor="blue", opacity=0.1, line_width=0)
-    fig.add_vrect(x0=expt_hrs, x1=tot_hrs,
+    fig.add_vrect(x0=exp_util_hrs, x1=tot_avail_hrs,
                   annotation_text="""
               If expecting to be over-utilised, <br> 
               weight bid towards utilisation to <br>
@@ -509,7 +510,7 @@ overview = dbc.Card(
                                     html.Div(
                                         [
                                             dcc.Input(
-                                                id="tot-tcv",
+                                                id="tcv",
                                                 type="number",
                                                 value=0.30,
                                                 min=0,
@@ -604,7 +605,7 @@ overview = dbc.Card(
                                     html.Div(
                                         [
                                             dcc.Input(
-                                                id="tot-hrs",
+                                                id="tot-avail-hrs",
                                                 type="number",
                                                 value=20,
                                                 min=0,
@@ -936,7 +937,7 @@ overview = dbc.Card(
                                     html.Div(
                                         [
                                             dcc.Input(
-                                                id="persn-cost-hrlyrate",
+                                                id="person-rate",
                                                 type="number",
                                                 min=0,
                                                 max=100,
@@ -951,7 +952,7 @@ overview = dbc.Card(
                                                 }
                                             ),
                                             dcc.Input(
-                                                id="persn-cost-fixed",
+                                                id="fixed-person-hrs",
                                                 type="number",
                                                 min=0,
                                                 max=120,
@@ -966,7 +967,7 @@ overview = dbc.Card(
                                                 }
                                             ),
                                             dcc.Input(
-                                                id="persn-cost-marg",
+                                                id="util-person-hrs",
                                                 type="number",
                                                 min=0,
                                                 max=120,
@@ -1357,7 +1358,7 @@ bidAnalysis = dbc.Card(
                             html.Div(
                                 [
                                     dcc.Input(
-                                        id="expt-hrs",
+                                        id="exp-util-hrs",
                                         type="number",
                                         value=3,
                                         min=0,
@@ -2070,10 +2071,10 @@ app.layout = html.Div([
                Input('asset-effic', 'value'),
                Input('asset-cap', 'value'),
                Input('lcos', 'value'),
-               Input('persn-cost-hrlyrate', 'value'),
-               Input('persn-cost-marg', 'value')])
+               Input('person-rate', 'value'),
+               Input('util-person-hrs', 'value')])
 def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, asset_cap,
-                               lcos, persn_cost_hrlyrate, persn_cost_marg):
+                               lcos, person_rate, util_person_hrs):
     """
     Function for calculating the main asset marginal costs from user input
 
@@ -2083,23 +2084,23 @@ def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, a
     :param asset_effic:
     :param asset_cap:
     :param lcos:
-    :param persn_cost_hrlyrate:
-    :param persn_cost_marg:
+    :param person_rate:
+    :param util_person_hrs:
 
     :return: marginal costs
     """
 
     # Calculate the marginal energy cost of utilisation (£/kWh)
-    marg_util = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
+    energy_SRMC = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
     marg_energy_util_cost = html.P(
         [
-            " {:10.3f}".format(marg_util)
+            " {:10.3f}".format(energy_SRMC)
         ],
         className='paratext'
     )
 
     # Calculate the marginal hourly cost of utilisation (£/hr)
-    hrly_util = persn_cost_hrlyrate * (persn_cost_marg / 60)
+    hrly_util = person_rate * (util_person_hrs / 60)
     marg_hrly_util_cost = html.P(
         [
             " {:10.3f}".format(hrly_util)
@@ -2108,29 +2109,29 @@ def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, a
     )
 
     # Calculate the marginal personnel cost of utilisation (£/kWh)
-    persn_util = hrly_util / asset_cap
-    marg_persn_util_cost = html.P(
+    person_SRMC = hrly_util / asset_cap
+    marg_person_SRMC = html.P(
         [
-            " {:10.3f}".format(persn_util)
+            " {:10.3f}".format(person_SRMC)
         ],
         className='paratext'
     )
 
-    tot_marg = marg_util + persn_util
-    tot_marg_cost = html.P(
+    tot_SRMC = energy_SRMC + person_SRMC
+    tot_SRMC_cost = html.P(
         [
-            " {:10.3f}".format(tot_marg)
+            " {:10.3f}".format(tot_SRMC)
         ],
         className='paratext'
     )
 
-    return marg_energy_util_cost, marg_hrly_util_cost, marg_persn_util_cost, tot_marg_cost
+    return marg_energy_util_cost, marg_hrly_util_cost, marg_person_SRMC, tot_SRMC_cost
 
 
 @app.callback(Output('visible-datatbl', 'children'),
-              [Input('tot-hrs', 'value'),
-               Input('tot-tcv', 'value'),
-               Input('expt-hrs', 'value'),
+              [Input('tot-avail-hrs', 'value'),
+               Input('tcv', 'value'),
+               Input('exp-util-hrs', 'value'),
                Input('avail-bid', 'value'),
                Input('avail-ceil', 'value'),
                Input('util-bid', 'value'),
@@ -2141,19 +2142,19 @@ def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, a
                Input('asset-effic', 'value'),
                Input('asset-cap', 'value'),
                Input('lcos', 'value'),
-               Input('persn-cost-hrlyrate', 'value'),
-               Input('persn-cost-fixed', 'value'),
-               Input('persn-cost-marg', 'value'),
+               Input('person-rate', 'value'),
+               Input('fixed-person-hrs', 'value'),
+               Input('util-person-hrs', 'value'),
                Input('show-datatbl', 'value')])
-def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util_ceil, duos_red,
-               duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
-               persn_cost_fixed, persn_cost_marg, value):
+def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid, util_ceil, duos_red,
+               duos_green, energy_cost, asset_effic, asset_cap, lcos, person_rate,
+               fixed_person_hrs, util_person_hrs, datatbl):
     """
     Function for producing three main data tables for costs from user input
 
-    :param tot_hrs:
-    :param tot_tcv:
-    :param expt_hrs:
+    :param tot_avail_hrs:
+    :param tcv:
+    :param exp_util_hrs:
     :param util_ceil:
     :param avail_ceil:
     :param duos_red:
@@ -2162,9 +2163,9 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
     :param asset_effic:
     :param asset_cap:
     :param lcos:
-    :param persn_cost_hrlyrate:
-    :param persn_cost_fixed:
-    :param persn_cost_marg:
+    :param person_rate:
+    :param fixed_person_hrs:
+    :param util_person_hrs:
     :param value: user selected table
 
     :return: costing table
@@ -2173,19 +2174,19 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
     """
     S1: Utilisation versus costs
     """
-    util_costs_df = pd.DataFrame(np.arange(0, tot_hrs + 1), columns=['Actual Utilisation Hours'])
+    util_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
     util_costs_df['Energy (kWh)'] = util_costs_df['Actual Utilisation Hours'] * asset_cap
 
     # Calculate the marginal energy cost of utilisation (£/kWh) and the marginal hourly cost of utilisation (£/hr)
-    marg_util_calc_tmp = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
-    hrly_util_calc_tmp = persn_cost_hrlyrate * (persn_cost_marg / 60)
+    energy_SRMC_calc_tmp = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
+    hrly_util_calc_tmp = person_rate * (util_person_hrs / 60)
 
-    util_costs_df['Marginal Cost of Utilisation (£)'] = (util_costs_df['Energy (kWh)'] * marg_util_calc_tmp) + \
+    util_costs_df['Marginal Cost of Utilisation (£)'] = (util_costs_df['Energy (kWh)'] * energy_SRMC_calc_tmp) + \
                                                         (util_costs_df['Actual Utilisation Hours'] * hrly_util_calc_tmp)
 
     # TODO: Does not include an option for 'Other Fixed Costs' at the moment to reduce complexity as
     #  there doesn't seem to be much of a case for it for an intial version
-    util_costs_df['Fixed Participation Cost (£)'] = persn_cost_hrlyrate * (persn_cost_fixed / 60)
+    util_costs_df['Fixed Participation Cost (£)'] = person_rate * (fixed_person_hrs / 60)
     util_costs_df['Operational Cost (£)'] = util_costs_df['Marginal Cost of Utilisation (£)'] + \
                                             util_costs_df['Fixed Participation Cost (£)']
 
@@ -2195,11 +2196,11 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
     """
     S2: Maximising Availability
     """
-    max_avail_costs_df = pd.DataFrame(np.arange(0, tot_hrs + 1), columns=['Actual Utilisation Hours'])
+    max_avail_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
 
     # Enter the user submitted bid and calc. Revenue and Profit
     max_avail_costs_df['Availability Bid (£)'] = avail_ceil
-    max_avail_costs_df['Revenue (£)'] = avail_ceil * tot_hrs * asset_cap
+    max_avail_costs_df['Revenue (£)'] = avail_ceil * tot_avail_hrs * asset_cap
     max_avail_costs_df['Operational Profit (£)'] = max_avail_costs_df['Revenue (£)'] - util_costs_df[
         'Operational Cost (£)']
     max_avail_costs_df['TCV (£/kWh)'] = max_avail_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
@@ -2207,7 +2208,7 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
     """
     S3: Maximising Utilisation
     """
-    max_util_costs_df = pd.DataFrame(np.arange(0, tot_hrs + 1), columns=['Actual Utilisation Hours'])
+    max_util_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
 
     # Enter the user submitted bid and calc. Revenue and Profit
     max_util_costs_df['Utilisation Bid (£)'] = util_ceil
@@ -2219,13 +2220,13 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
     """
     S4: Break Even
     """
-    break_even_costs_df = pd.DataFrame(np.arange(0, tot_hrs + 1), columns=['Actual Utilisation Hours'])
+    break_even_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
 
     # Calculate the Break Even params. based on user input
-    break_even_costs_df['Availability Bid (£)'] = (persn_cost_hrlyrate * (persn_cost_fixed / 60)) / asset_cap / tot_hrs
+    break_even_costs_df['Availability Bid (£)'] = (person_rate * (fixed_person_hrs / 60)) / asset_cap / tot_avail_hrs
     break_even_costs_df['Utilisatin Bid (£)'] = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green, duos_red,
-                                                              lcos, persn_cost_hrlyrate, persn_cost_marg)
-    break_even_costs_df['Revenue (£)'] = (break_even_costs_df['Availability Bid (£)'] * tot_hrs * asset_cap) + \
+                                                              lcos, person_rate, util_person_hrs)
+    break_even_costs_df['Revenue (£)'] = (break_even_costs_df['Availability Bid (£)'] * tot_avail_hrs * asset_cap) + \
                                          (break_even_costs_df['Utilisatin Bid (£)'] * util_costs_df['Energy (kWh)'])
     break_even_costs_df['Operational Profit (£)'] = break_even_costs_df['Revenue (£)'] - util_costs_df[
         'Operational Cost (£)']
@@ -2234,11 +2235,11 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
     """
     S5: User-Defined Bids and Costs
     """
-    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
+                             duos_red, lcos, person_rate, util_person_hrs)
 
-    user_bid_df = calc_costs(asset_cap, avail_bid, util_bid, persn_cost_hrlyrate,
-                             persn_cost_fixed, tot_marg, tot_hrs)[1]
+    user_bid_df = calc_costs(asset_cap, avail_bid, util_bid, person_rate,
+                             fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]
 
     # Produce data tables for reporting in thr Bid Analysis tab
     # TODO: Need to fix the unexpected left margins in the columns
@@ -2264,7 +2265,7 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(expt_hrs)
+                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2297,7 +2298,7 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(expt_hrs)
+                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2329,7 +2330,7 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(expt_hrs)
+                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2361,14 +2362,14 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(expt_hrs)
+                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
             },
             {
                 'if': {
-                    'filter_query': '{{TCV (£/kWh)}} > {}'.format(tot_tcv),
+                    'filter_query': '{{TCV (£/kWh)}} > {}'.format(tcv),
                     'column_id': 'TCV (£/kWh)'
                 },
                 'backgroundColor': '#f55442',
@@ -2402,14 +2403,14 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
             },
             {
                 'if': {
-                    'filter_query': '{{Utilisation Hours}} = {}'.format(expt_hrs)
+                    'filter_query': '{{Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
             },
             {
                 'if': {
-                    'filter_query': '{{TCV (£/kWh)}} > {}'.format(tot_tcv),
+                    'filter_query': '{{TCV (£/kWh)}} > {}'.format(tcv),
                     'column_id': 'TCV (£/kWh)'
                 },
                 'backgroundColor': '#f55442',
@@ -2421,43 +2422,43 @@ def datatables(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util
         fill_width=False
     ),
 
-    if value == "S1: Utilisation vs Costs":
+    if datatbl == "S1: Utilisation vs Costs":
         return util_costs_datatbl
-    elif value == "S2: Maximising Availability":
+    elif datatbl == "S2: Maximising Availability":
         return max_avail_datatbl
-    elif value == "S3: Maximising Utilisation":
+    elif datatbl == "S3: Maximising Utilisation":
         return max_util_databl
-    elif value == "S4: Break Even Costs":
+    elif datatbl == "S4: Break Even Costs":
         return break_even_datatbl
-    elif value == "S5: User-Defined Bids":
+    elif datatbl == "S5: User-Defined Bids":
         return usr_bids_databl
     else:
         return html.Div([])
 
 
 @app.callback(Output('maxout_tcv_bids', 'children'),
-              [Input('tot-hrs', 'value'),
-               Input('tot-tcv', 'value'),
-               Input('expt-hrs', 'value'),
+              [Input('tot-avail-hrs', 'value'),
+               Input('tcv', 'value'),
+               Input('exp-util-hrs', 'value'),
                Input('avail-ceil', 'value'),
                Input('util-ceil', 'value'),
                Input('asset-cap', 'value'),
                Input('weight-slider', 'value')])
-def maxout_tcv_display(tot_hrs, tot_tcv, expt_hrs, avail_ceil, util_ceil, asset_cap, bid_weight):
+def maxout_tcv_display(tot_avail_hrs, tcv, exp_util_hrs, avail_ceil, util_ceil, asset_cap, bid_weight):
     """
     Calculates and updates the Availability and Utilisation bids (to maxout the TCV)
     depnding on the user weighting input from slider
 
-    :param tot_hrs:
-    :param tot_tcv:
-    :param expt_hrs:
+    :param tot_avail_hrs:
+    :param tcv:
+    :param exp_util_hrs:
     :param avail_ceil:
     :param util_ceil:
     :param asset_cap:
     :param bid_weight:
     :return:
     """
-    avail, util = maxout_tcv(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, bid_weight)
+    avail, util = maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, bid_weight)
 
     maxout_tcv_bids = html.Div(
         [
@@ -2501,17 +2502,17 @@ def maxout_tcv_display(tot_hrs, tot_tcv, expt_hrs, avail_ceil, util_ceil, asset_
 
 @app.callback([Output('max-bids', 'children'),
                Output('exceed-warning', 'children')],
-              [Input('tot-hrs', 'value'),
-               Input('tot-tcv', 'value'),
-               Input('expt-hrs', 'value'),
+              [Input('tot-avail-hrs', 'value'),
+               Input('tcv', 'value'),
+               Input('exp-util-hrs', 'value'),
                Input('avail-bid', 'value'),
                Input('avail-ceil', 'value'),
                Input('util-bid', 'value'),
                Input('util-ceil', 'value'),
                Input('asset-cap', 'value')])
-def max_bid_calcs(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, util_ceil, asset_cap):
-    avail_max = calc_avail_bid(tot_tcv, expt_hrs, tot_hrs, util_bid, avail_ceil, asset_cap)[0]
-    util_max = calc_util_bid(tot_tcv, expt_hrs, tot_hrs, avail_bid, util_ceil, asset_cap)[0]
+def max_bid_calcs(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid, util_ceil, asset_cap):
+    avail_max = calc_avail_bid(tcv, exp_util_hrs, tot_avail_hrs, util_bid, avail_ceil, asset_cap)[0]
+    util_max = calc_util_bid(tcv, exp_util_hrs, tot_avail_hrs, avail_bid, util_ceil, asset_cap)[0]
 
     max_bids = html.Div(
         [
@@ -2582,9 +2583,9 @@ def max_bid_calcs(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, u
 @app.callback([Output('expt-vs-actual-heatmap', 'children'),
                Output('weight-vs-actual-heatmap', 'children'),
                Output('profit-vs-actual-plot', 'children')],
-              [Input('tot-hrs', 'value'),
-               Input('tot-tcv', 'value'),
-               Input('expt-hrs', 'value'),
+              [Input('tot-avail-hrs', 'value'),
+               Input('tcv', 'value'),
+               Input('exp-util-hrs', 'value'),
                Input('avail-ceil', 'value'),
                Input('avail-bid', 'value'),
                Input('util-ceil', 'value'),
@@ -2595,30 +2596,30 @@ def max_bid_calcs(tot_hrs, tot_tcv, expt_hrs, avail_bid, avail_ceil, util_bid, u
                Input('asset-effic', 'value'),
                Input('asset-cap', 'value'),
                Input('lcos', 'value'),
-               Input('persn-cost-hrlyrate', 'value'),
-               Input('persn-cost-fixed', 'value'),
-               Input('persn-cost-marg', 'value'),
+               Input('person-rate', 'value'),
+               Input('fixed-person-hrs', 'value'),
+               Input('util-person-hrs', 'value'),
                Input('weight-slider', 'value')])
-def heatmaps_plots(tot_hrs, tot_tcv, expt_hrs, avail_ceil, avail_bid, util_ceil, util_bid, duos_red,
-             duos_green, energy_cost, asset_effic, asset_cap, lcos, persn_cost_hrlyrate,
-             persn_cost_fixed, persn_cost_marg, weight):
+def heatmaps_plots(tot_avail_hrs, tcv, exp_util_hrs, avail_ceil, avail_bid, util_ceil, util_bid, duos_red,
+             duos_green, energy_cost, asset_effic, asset_cap, lcos, person_rate,
+             fixed_person_hrs, util_person_hrs, weight):
 
     # TODO: Plotting colours need to be more consistent in all plots.
-    tot_marg = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, persn_cost_hrlyrate, persn_cost_marg)
+    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
+                             duos_red, lcos, person_rate, util_person_hrs)
 
-    profits = profit_vs_expected_util(tot_tcv, expt_hrs, tot_hrs, util_ceil, avail_ceil, asset_cap, persn_cost_fixed,
-                                      persn_cost_hrlyrate, tot_marg)
+    profits = profit_vs_expected_util(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, fixed_person_hrs,
+                                      person_rate, tot_SRMC)
 
     # Various figures for visualisation
-    expt_vs_actual_heatmap = plot_exp_vs_act_heatmap(tot_hrs, expt_hrs, profits, weight)
-    weight_vs_actual_heatmap = plot_weight_vs_act_heatmap_plotly(profits, expt_hrs, tot_hrs, util_ceil)
+    expt_vs_actual_heatmap = plot_exp_vs_act_heatmap(tot_avail_hrs, exp_util_hrs, profits, weight)
+    weight_vs_actual_heatmap = plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs, tot_avail_hrs, util_ceil)
 
     # TODO: Yes, I know, this is messy and certainly not efficent! Well be corrected with module pairing
-    profit_vs_actual_plot = profit_vs_actual_plotly(tot_tcv, expt_hrs, tot_hrs, asset_effic, asset_cap,
+    profit_vs_actual_plot = profit_vs_actual_plotly(tcv, exp_util_hrs, tot_avail_hrs, asset_effic, asset_cap,
                                                     energy_cost, duos_green, duos_red, lcos, util_bid,
-                                                    util_ceil, avail_bid, avail_ceil, persn_cost_hrlyrate,
-                                                    persn_cost_fixed, persn_cost_marg)
+                                                    util_ceil, avail_bid, avail_ceil, person_rate,
+                                                    fixed_person_hrs, util_person_hrs)
 
     return dcc.Graph(figure=expt_vs_actual_heatmap), \
            dcc.Graph(figure=weight_vs_actual_heatmap), \
