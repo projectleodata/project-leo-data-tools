@@ -64,7 +64,7 @@ service_type = 'turn-up'    # the type of service
 tcv = 0.30                  # £/kWh
 avail_ceil = 0.045          # £/kW/h
 util_ceil = 0.30            # £/kWh
-exp_util_hrs = 6.0          # hrs - expected utilisation hours
+exp_util_hrs = 3.0          # hrs - expected utilisation hours
 hrs_per_service_win = 4.0   # hrs per service window e.g. 4 if window is 3-7pm every day
 hrs_per_util = 1.0          # number of hrs in a single utilisation - this is hard to know and could vary between 1 and service window
 
@@ -605,9 +605,9 @@ if __name__ == "__main__":
     print("Independent profit: £{:0.2f}".format(exp_profit))
     
     
-    # analysis = profit_vs_expected_util_vs_weight(weight=0.5)
-    # plot_exp_vs_act_heatmap_plotly(analysis, 0.5)
-    # plot_weight_vs_act_heatmap_plotly(analysis ,exp_util_hrs)
+    analysis = profit_vs_expected_util_vs_weight(weight=0.5)
+    plot_exp_vs_act_heatmap_plotly(analysis, 0.5)
+    plot_weight_vs_act_heatmap_plotly(analysis ,exp_util_hrs)
     
     ## independent scenario
     # bids = inde_maxTCV(exp_util_hrs)

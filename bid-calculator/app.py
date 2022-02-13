@@ -482,7 +482,7 @@ overview = dbc.Card(
                                             html.P(
                                                 [
                                                     html.Span(
-                                                        "Total Contract Value (TCV in £) *", id="tcv-tooltip"
+                                                        "Total Contract Value (TCV £/kWh) *", id="tcv-tooltip"
                                                     ),
                                                 ],
                                                 className='paratext'
@@ -759,7 +759,7 @@ overview = dbc.Card(
                                             html.P(
                                                 [
                                                     html.Span(
-                                                        "DUoS (£) *", id="duos-tooltip"
+                                                        "DUoS (£/kWh) *", id="duos-tooltip"
                                                     ),
                                                 ],
                                                 className='paratext'
