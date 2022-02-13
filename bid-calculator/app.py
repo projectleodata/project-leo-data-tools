@@ -1591,7 +1591,7 @@ bidAnalysis = dbc.Card(
                             html.Div(
                                 [
                                     dcc.Slider(
-                                        0, 1, 0.1,
+                                        min=0, max=1, step=0.1,
                                         id='weight-slider',
                                         value=0.50,
                                         marks={
