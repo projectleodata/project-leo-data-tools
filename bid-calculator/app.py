@@ -774,6 +774,7 @@ overview = dbc.Card(
                                                 style={
                                                     "background-color": "#3D4E68",
                                                     "color": "white",
+                                                    'width': '300px',
                                                     'text-align': 'center',
                                                     'align-items': 'center',
                                                     'border-radius': '30px',
@@ -842,16 +843,22 @@ overview = dbc.Card(
                                                 style={
                                                     "background-color": "#3D4E68",
                                                     "color": "white",
-                                                    'width': '200px',
-                                                    'height': '30px',
+                                                    'width': '300px',
                                                     'text-align': 'center',
                                                     'align-items': 'center',
                                                     'border-radius': '30px',
                                                     'padding-top': '5px',
+                                                    'padding-left': '15px',
+                                                    'padding-right': '15px',
+                                                    'padding-bottom': '5px',
+
                                                 }
                                             ),
                                         ],
-                                        className="three columns"
+                                        className="four columns",
+                                        style={
+                                            'padding-left': '60px',
+                                        }
                                     ),
                                     html.Div(
                                         [
@@ -876,9 +883,10 @@ overview = dbc.Card(
                                 ],
                                 className="row ",
                             ),
-                            # Asset Efficiency
+                            # Asset Efficiency & Hrly rate
                             html.Div(
                                 [
+                                    # Asset Efficiency
                                     html.Div(
                                         [
                                             html.P(
@@ -910,6 +918,41 @@ overview = dbc.Card(
                                         ],
                                         className="three columns"
                                     ),
+                                    # Hourly Rate
+                                    html.Div(
+                                        [
+                                            html.P(
+                                                [
+                                                    "Personnel Hourly Rate (£/h)"
+                                                ],
+                                                className="paratext"
+                                            ),
+                                        ],
+                                        className="four columns",
+                                        style={
+                                            'padding-left': '60px',
+                                        }
+                                    ),
+                                    html.Div(
+                                        [
+                                            dcc.Input(
+                                                id="person-rate",
+                                                type="number",
+                                                min=0,
+                                                max=100,
+                                                step=0.5,
+                                                value=15,
+                                                style={
+                                                    'fontFamily': "avenir",
+                                                    'fontSize': '16px',
+                                                    'color': '#1A2542',
+                                                    'width': '100px',
+                                                    'text-align': 'center'
+                                                }
+                                            ),
+                                        ],
+                                        className="two columns",
+                                    ),
                                 ],
                                 className="row ",
                             ),
@@ -921,16 +964,15 @@ overview = dbc.Card(
                                             html.P(
                                                 [
                                                     html.Span(
-                                                        "Personnel Costs *", id="persn-tooltip"
+                                                        "Aution Participation Time (mins) *", id="persn-tooltip"
                                                     ),
                                                 ],
                                                 className='paratext'
                                             ),
                                             # TODO: Get to work in styles sheet
                                             dbc.Tooltip(
-                                                "Enter your hourly rate for personnel, the fixed number of \
-                                                minutes to take part in an auction, and minutes used to \
-                                                schedule/dispatch a flex event",
+                                                "Enter the total number of minutes per auction, \
+                                                irrespective of utilisation or not",
                                                 target="persn-tooltip",
                                                 placement="top",
                                                 className="paratext",
@@ -954,21 +996,6 @@ overview = dbc.Card(
                                     html.Div(
                                         [
                                             dcc.Input(
-                                                id="person-rate",
-                                                type="number",
-                                                min=0,
-                                                max=100,
-                                                step=0.5,
-                                                value=15,
-                                                style={
-                                                    'fontFamily': "avenir",
-                                                    'fontSize': '16px',
-                                                    'color': '#1A2542',
-                                                    'width': '100px',
-                                                    'text-align': 'center'
-                                                }
-                                            ),
-                                            dcc.Input(
                                                 id="fixed-person-hrs",
                                                 type="number",
                                                 min=0,
@@ -983,6 +1010,49 @@ overview = dbc.Card(
                                                     'text-align': 'center'
                                                 }
                                             ),
+                                        ],
+                                        className="three columns"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.P(
+                                                [
+                                                    html.Span(
+                                                        "Time to Schedule/Dispatch/Monitor (mins) *",
+                                                        id="persn2-tooltip"
+                                                    ),
+                                                ],
+                                                className='paratext'
+                                            ),
+                                            # TODO: Get to work in styles sheet
+                                            dbc.Tooltip(
+                                                "Enter the total number of minutes per auction, \
+                                                in the case of a utilisation instruction",
+                                                target="persn2-tooltip",
+                                                placement="top",
+                                                className="paratext",
+                                                style={
+                                                    "background-color": "#3D4E68",
+                                                    "color": "white",
+                                                    'width': '300px',
+                                                    'text-align': 'center',
+                                                    'align-items': 'center',
+                                                    'border-radius': '30px',
+                                                    'padding-top': '5px',
+                                                    'padding-left': '15px',
+                                                    'padding-right': '15px',
+                                                    'padding-bottom': '5px',
+
+                                                }
+                                            ),
+                                        ],
+                                        className="four columns",
+                                        style={
+                                            'padding-left': '60px'
+                                        }
+                                    ),
+                                    html.Div(
+                                        [
                                             dcc.Input(
                                                 id="util-person-hrs",
                                                 type="number",
@@ -999,8 +1069,8 @@ overview = dbc.Card(
                                                 }
                                             ),
                                         ],
-                                        className="four columns"
-                                    ),
+                                        className="two columns"
+                                    )
                                 ],
                                 className="row ",
                             ),
@@ -1490,6 +1560,7 @@ bidAnalysis = dbc.Card(
                             # Max Bid readout
                             html.Div(id='max-bids'),
                             html.Div(id='exceed-warning'),
+                            html.Div(id='tcv-warning'),
 
                             # Plot of Profit vs Actual Hours
                             # TODO: We need a right up (small) of how to read this plot
@@ -2145,7 +2216,8 @@ def calc_marg_energy_util_cost(duos_event, duos_nonevent, energy_cost, asset_eff
     return marg_energy_util_cost, marg_hrly_util_cost, marg_person_SRMC, tot_SRMC_cost
 
 
-@app.callback(Output('visible-datatbl', 'children'),
+@app.callback([Output('visible-datatbl', 'children'),
+               Output('tcv-warning', 'children')],
               [Input('tot-avail-hrs', 'value'),
                Input('tcv', 'value'),
                Input('exp-util-hrs', 'value'),
@@ -2439,18 +2511,40 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
         fill_width=False
     ),
 
+    # TCV exceedence warning under bid entry.
+    tcv_exceed_warning = html.Div()
+    calc_tcv = user_bid_df['TCV (£/kWh)'][user_bid_df['Utilisation Hours'] == exp_util_hrs].iloc[0]
+
+    if calc_tcv > tcv:
+        tcv_exceed_warning = html.Div(
+            [
+                html.P(
+                    [
+                        html.Span("Warning: Your entered bids will exceed the TCV of £{:.3f}".format(tcv),
+                                  style={"color": "#ffffff"})
+                    ],
+                    className="paratext"
+                )
+            ],
+            className="row",
+            style={
+                'text-align': 'center',
+                'background-color': '#f55442'
+            }
+        )
+
     if datatbl == "S1: Utilisation vs Costs":
-        return util_costs_datatbl
+        return util_costs_datatbl, tcv_exceed_warning
     elif datatbl == "S2: Maximising Availability":
-        return max_avail_datatbl
+        return max_avail_datatbl, tcv_exceed_warning
     elif datatbl == "S3: Maximising Utilisation":
-        return max_util_databl
+        return max_util_databl, tcv_exceed_warning
     elif datatbl == "S4: Break Even Costs":
-        return break_even_datatbl
+        return break_even_datatbl, tcv_exceed_warning
     elif datatbl == "S5: User-Defined Bids":
-        return usr_bids_databl
+        return usr_bids_databl, tcv_exceed_warning
     else:
-        return html.Div([])
+        return html.Div([]), tcv_exceed_warning
 
 
 @app.callback(Output('maxout_tcv_bids', 'children'),
@@ -2550,13 +2644,13 @@ def max_bid_calcs(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_
     )
 
     # Warning row if any of the ceilings are exceed. If they aren't, nothing is shown
-    exceed_warning = html.Div()
+    ceil_exceed_warning = html.Div()
 
     if util_bid > util_ceil:
         bid = "Utilisation Bid"
         ceil = util_ceil
 
-        exceed_warning = html.Div(
+        ceil_exceed_warning = html.Div(
             [
                 html.P(
                     [
@@ -2577,7 +2671,7 @@ def max_bid_calcs(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_
         bid = "Availability Bid"
         ceil = avail_ceil
 
-        exceed_warning = html.Div(
+        ceil_exceed_warning = html.Div(
             [
                 html.P(
                     [
@@ -2594,7 +2688,7 @@ def max_bid_calcs(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_
             }
         )
 
-    return max_bids, exceed_warning
+    return max_bids, ceil_exceed_warning
 
 
 @app.callback([Output('expt-vs-actual-heatmap', 'children'),
