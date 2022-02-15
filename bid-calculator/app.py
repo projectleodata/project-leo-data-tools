@@ -835,7 +835,7 @@ overview = dbc.Card(
                                             ),
                                             # TODO: Get to work in styles sheet
                                             dbc.Tooltip(
-                                                "As determined by DSO",
+                                                "Levelized cost of storage proportioned to flexibility market",
                                                 target="lcos-tooltip",
                                                 placement="top",
                                                 className="paratext",
