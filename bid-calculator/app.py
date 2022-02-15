@@ -76,16 +76,16 @@ def get_header(app):
 
 
 # TODO: Does not include 'Other Fixed' at the moment
-def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                  duos_red, lcos, person_rate, util_person_hrs):
+def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent,
+                  duos_event, lcos, person_rate, util_person_hrs):
     """
     Simple function to determine the total marginal cost
 
     :param asset_effic:
     :param asset_cap:
     :param energy_cost:
-    :param duos_green:
-    :param duos_red:
+    :param duos_nonevent:
+    :param duos_event:
     :param lcos:
     :param person_rate:
     :param util_person_hrs:
@@ -94,7 +94,7 @@ def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
 
     """
     # TODO: Does not include hrs_per_util variable as this is assumed to be 1.0
-    energy_SRMC = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
+    energy_SRMC = (1. / asset_effic) * energy_cost + (duos_nonevent - duos_event) + lcos
     hrly_util = person_rate * (util_person_hrs / 60)
     person_SRMC = hrly_util / asset_cap
     tot_SRMC = energy_SRMC + person_SRMC
@@ -287,11 +287,11 @@ def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs, tot_avail_hrs, util
     return fig
 
 
-def profit_vs_actual_plotly(tcv, exp_util_hrs, tot_avail_hrs, asset_effic, asset_cap, energy_cost, duos_green,
-                            duos_red, lcos, util_bid, util_ceil, avail_bid, avail_ceil, person_rate,
+def profit_vs_actual_plotly(tcv, exp_util_hrs, tot_avail_hrs, asset_effic, asset_cap, energy_cost, duos_nonevent,
+                            duos_event, lcos, util_bid, util_ceil, avail_bid, avail_ceil, person_rate,
                             fixed_person_hrs, util_person_hrs):
-    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, person_rate, util_person_hrs)
+    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent,
+                             duos_event, lcos, person_rate, util_person_hrs)
 
     bids = maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, 0.0)
     max_avail_profit = calc_costs(asset_cap, bids[0], bids[1], person_rate,
@@ -514,7 +514,7 @@ overview = dbc.Card(
                                                 type="number",
                                                 value=0.30,
                                                 min=0,
-                                                step=0.1,
+                                                step=0.01,
                                                 style={
                                                     'fontFamily': "avenir",
                                                     'fontSize': '16px',
@@ -609,7 +609,6 @@ overview = dbc.Card(
                                                 type="number",
                                                 value=20,
                                                 min=0,
-                                                max=20,
                                                 step=1,
                                                 style={
                                                     'fontFamily': "avenir",
@@ -695,11 +694,12 @@ overview = dbc.Card(
                                     ),
                                     html.Div(
                                         [
+                                            # TODO: Check FSA to confirm limits on installed capacity entries
                                             dcc.Input(
                                                 id="asset-cap",
                                                 type="number",
                                                 min=0,
-                                                step=1,
+                                                step=0.1,
                                                 value=16,
                                                 style={
                                                     'fontFamily': "avenir",
@@ -766,7 +766,8 @@ overview = dbc.Card(
                                             ),
                                             # TODO: Get to work in styles sheet
                                             dbc.Tooltip(
-                                                "Extremes of DUoS rates. Left: Red; Right: Green",
+                                                "Event: DUoS rate during flexibility event. "
+                                                "Non-event: DUoS rate during recharging of asset",
                                                 target="duos-tooltip",
                                                 placement="top",
                                                 className="paratext",
@@ -789,7 +790,7 @@ overview = dbc.Card(
                                     html.Div(
                                         [
                                             dcc.Input(
-                                                id="duos-red",
+                                                id="duos-event",
                                                 type="number",
                                                 min=0,
                                                 max=1,
@@ -804,7 +805,7 @@ overview = dbc.Card(
                                                 }
                                             ),
                                             dcc.Input(
-                                                id="duos-green",
+                                                id="duos-nonevent",
                                                 type="number",
                                                 min=0,
                                                 max=1,
@@ -826,15 +827,31 @@ overview = dbc.Card(
                                         [
                                             html.P(
                                                 [
-                                                    "LCOS (£/kWh)"
+                                                    html.Span(
+                                                        "LCOS (£/kWh) *", id="lcos-tooltip"
+                                                    ),
                                                 ],
-                                                className="paratext"
+                                                className='paratext'
+                                            ),
+                                            # TODO: Get to work in styles sheet
+                                            dbc.Tooltip(
+                                                "As determined by DSO",
+                                                target="lcos-tooltip",
+                                                placement="top",
+                                                className="paratext",
+                                                style={
+                                                    "background-color": "#3D4E68",
+                                                    "color": "white",
+                                                    'width': '200px',
+                                                    'height': '30px',
+                                                    'text-align': 'center',
+                                                    'align-items': 'center',
+                                                    'border-radius': '30px',
+                                                    'padding-top': '5px',
+                                                }
                                             ),
                                         ],
-                                        className="four columns",
-                                        style={
-                                            'padding-left': '60px',
-                                        }
+                                        className="three columns"
                                     ),
                                     html.Div(
                                         [
@@ -2065,21 +2082,21 @@ app.layout = html.Div([
                Output('marg-hrly-util-cost', 'children'),
                Output('marg-persn-cost', 'children'),
                Output('tot-marg-cost', 'children')],
-              [Input('duos-red', 'value'),
-               Input('duos-green', 'value'),
+              [Input('duos-event', 'value'),
+               Input('duos-nonevent', 'value'),
                Input('energy-cost', 'value'),
                Input('asset-effic', 'value'),
                Input('asset-cap', 'value'),
                Input('lcos', 'value'),
                Input('person-rate', 'value'),
                Input('util-person-hrs', 'value')])
-def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, asset_cap,
+def calc_marg_energy_util_cost(duos_event, duos_nonevent, energy_cost, asset_effic, asset_cap,
                                lcos, person_rate, util_person_hrs):
     """
     Function for calculating the main asset marginal costs from user input
 
-    :param duos_red:
-    :param duos_green:
+    :param duos_event:
+    :param duos_nonevent:
     :param energy_cost:
     :param asset_effic:
     :param asset_cap:
@@ -2091,7 +2108,7 @@ def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, a
     """
 
     # Calculate the marginal energy cost of utilisation (£/kWh)
-    energy_SRMC = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
+    energy_SRMC = (1. / asset_effic) * energy_cost + (duos_nonevent - duos_event) + lcos
     marg_energy_util_cost = html.P(
         [
             " {:10.3f}".format(energy_SRMC)
@@ -2136,8 +2153,8 @@ def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, a
                Input('avail-ceil', 'value'),
                Input('util-bid', 'value'),
                Input('util-ceil', 'value'),
-               Input('duos-red', 'value'),
-               Input('duos-green', 'value'),
+               Input('duos-event', 'value'),
+               Input('duos-nonevent', 'value'),
                Input('energy-cost', 'value'),
                Input('asset-effic', 'value'),
                Input('asset-cap', 'value'),
@@ -2146,8 +2163,8 @@ def calc_marg_energy_util_cost(duos_red, duos_green, energy_cost, asset_effic, a
                Input('fixed-person-hrs', 'value'),
                Input('util-person-hrs', 'value'),
                Input('show-datatbl', 'value')])
-def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid, util_ceil, duos_red,
-               duos_green, energy_cost, asset_effic, asset_cap, lcos, person_rate,
+def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid, util_ceil, duos_event,
+               duos_nonevent, energy_cost, asset_effic, asset_cap, lcos, person_rate,
                fixed_person_hrs, util_person_hrs, datatbl):
     """
     Function for producing three main data tables for costs from user input
@@ -2157,8 +2174,8 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     :param exp_util_hrs:
     :param util_ceil:
     :param avail_ceil:
-    :param duos_red:
-    :param duos_green:
+    :param duos_event:
+    :param duos_nonevent:
     :param energy_cost:
     :param asset_effic:
     :param asset_cap:
@@ -2178,7 +2195,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     util_costs_df['Energy (kWh)'] = util_costs_df['Actual Utilisation Hours'] * asset_cap
 
     # Calculate the marginal energy cost of utilisation (£/kWh) and the marginal hourly cost of utilisation (£/hr)
-    energy_SRMC_calc_tmp = (1. / asset_effic) * energy_cost + (duos_green - duos_red) + lcos
+    energy_SRMC_calc_tmp = (1. / asset_effic) * energy_cost + (duos_nonevent - duos_event) + lcos
     hrly_util_calc_tmp = person_rate * (util_person_hrs / 60)
 
     util_costs_df['Marginal Cost of Utilisation (£)'] = (util_costs_df['Energy (kWh)'] * energy_SRMC_calc_tmp) + \
@@ -2224,7 +2241,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
 
     # Calculate the Break Even params. based on user input
     break_even_costs_df['Availability Bid (£)'] = (person_rate * (fixed_person_hrs / 60)) / asset_cap / tot_avail_hrs
-    break_even_costs_df['Utilisatin Bid (£)'] = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green, duos_red,
+    break_even_costs_df['Utilisatin Bid (£)'] = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent, duos_event,
                                                               lcos, person_rate, util_person_hrs)
     break_even_costs_df['Revenue (£)'] = (break_even_costs_df['Availability Bid (£)'] * tot_avail_hrs * asset_cap) + \
                                          (break_even_costs_df['Utilisatin Bid (£)'] * util_costs_df['Energy (kWh)'])
@@ -2235,8 +2252,8 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     """
     S5: User-Defined Bids and Costs
     """
-    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, person_rate, util_person_hrs)
+    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent,
+                             duos_event, lcos, person_rate, util_person_hrs)
 
     user_bid_df = calc_costs(asset_cap, avail_bid, util_bid, person_rate,
                              fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]
@@ -2590,8 +2607,8 @@ def max_bid_calcs(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_
                Input('avail-bid', 'value'),
                Input('util-ceil', 'value'),
                Input('util-bid', 'value'),
-               Input('duos-red', 'value'),
-               Input('duos-green', 'value'),
+               Input('duos-event', 'value'),
+               Input('duos-nonevent', 'value'),
                Input('energy-cost', 'value'),
                Input('asset-effic', 'value'),
                Input('asset-cap', 'value'),
@@ -2600,13 +2617,13 @@ def max_bid_calcs(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_
                Input('fixed-person-hrs', 'value'),
                Input('util-person-hrs', 'value'),
                Input('weight-slider', 'value')])
-def heatmaps_plots(tot_avail_hrs, tcv, exp_util_hrs, avail_ceil, avail_bid, util_ceil, util_bid, duos_red,
-             duos_green, energy_cost, asset_effic, asset_cap, lcos, person_rate,
+def heatmaps_plots(tot_avail_hrs, tcv, exp_util_hrs, avail_ceil, avail_bid, util_ceil, util_bid, duos_event,
+             duos_nonevent, energy_cost, asset_effic, asset_cap, lcos, person_rate,
              fixed_person_hrs, util_person_hrs, weight):
 
     # TODO: Plotting colours need to be more consistent in all plots.
-    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_green,
-                             duos_red, lcos, person_rate, util_person_hrs)
+    tot_SRMC = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent,
+                             duos_event, lcos, person_rate, util_person_hrs)
 
     profits = profit_vs_expected_util(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, fixed_person_hrs,
                                       person_rate, tot_SRMC)
@@ -2617,7 +2634,7 @@ def heatmaps_plots(tot_avail_hrs, tcv, exp_util_hrs, avail_ceil, avail_bid, util
 
     # TODO: Yes, I know, this is messy and certainly not efficent! Well be corrected with module pairing
     profit_vs_actual_plot = profit_vs_actual_plotly(tcv, exp_util_hrs, tot_avail_hrs, asset_effic, asset_cap,
-                                                    energy_cost, duos_green, duos_red, lcos, util_bid,
+                                                    energy_cost, duos_nonevent, duos_event, lcos, util_bid,
                                                     util_ceil, avail_bid, avail_ceil, person_rate,
                                                     fixed_person_hrs, util_person_hrs)
 
