@@ -75,6 +75,25 @@ def get_header(app):
     return header
 
 
+def df_fmting(df):
+
+    cols = df.columns.to_list()
+    var_dp_cols = {'Availability Bid (£/kW/h)': 3,
+                   'Energy (kWh)': 2,
+                   'Utilisation Hours': 0}
+
+    # Format how values are printed depending on the column
+    for col in cols:
+        if col in var_dp_cols.keys():
+            # Handle specific cols for varying dp formats
+            df[col] = df[col].round(var_dp_cols[col])
+        else:
+            # Round values to 2 dp otherwise
+            df[col] = df[col].round(2)
+
+    return df
+
+
 # TODO: Does not include 'Other Fixed' at the moment
 def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent,
                   duos_event, lcos, person_rate, util_person_hrs):
@@ -240,7 +259,7 @@ def plot_exp_vs_act_heatmap(tot_avail_hrs, exp_util_hrs, profits, weight):
     fig.update_yaxes(title_text="Expected Utilisation Hours",
                      nticks=int(tot_avail_hrs + 1),
                      range=[-0.5, tot_avail_hrs + 0.5])
-    fig.update_xaxes(title_text="Actual Utilisation Hours",
+    fig.update_xaxes(title_text="Utilisation Hours",
                      nticks=int(tot_avail_hrs + 1),
                      range=[-0.5, tot_avail_hrs + 0.5])
     return fig
@@ -279,7 +298,7 @@ def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs, tot_avail_hrs, util
     fig.add_vrect(x0=exp_util_hrs - 0.5, x1=exp_util_hrs + 0.5, line_width=1)
 
     fig.update_yaxes(title_text="Bid weighting")
-    fig.update_xaxes(title_text="Actual Utilisation Hours",
+    fig.update_xaxes(title_text="Utilisation Hours",
                      nticks=int(tot_avail_hrs + 1),
                      range=[0, tot_avail_hrs])
     fig.update_yaxes(title_text="Utilisation Bid", secondary_y=True)
@@ -315,7 +334,7 @@ def profit_vs_actual_plotly(tcv, exp_util_hrs, tot_avail_hrs, asset_effic, asset
                   width=1150, height=800)
 
     fig.update_yaxes(title_text="Profit (£)")
-    fig.update_xaxes(title_text="Actual Utilisation Hours",
+    fig.update_xaxes(title_text="Utilisation Hours",
                      nticks=int(tot_avail_hrs + 1),
                      range=[0, tot_avail_hrs])
     fig.add_vline(x=exp_util_hrs, fillcolor='black')
@@ -1703,7 +1722,7 @@ bidAnalysis = dbc.Card(
                             # TODO: Need a write-up (small) on how to read these plots
                             html.Details(
                                 [
-                                    html.Summary('Explore: Heatmap of Expected vs Actual Utilisation Hours '
+                                    html.Summary('Explore: Heatmap of Expected vs Utilisation Hours '
                                                  'with Profit (£)'),
                                     html.Div(id='expt-vs-actual-heatmap'),
                                 ],
@@ -1716,7 +1735,7 @@ bidAnalysis = dbc.Card(
                             # Heatmap of weight vs actual hours and profit
                             html.Details(
                                 [
-                                    html.Summary('Explore: Heatmap of Bid Weight vs Actual Utilisation Hours '
+                                    html.Summary('Explore: Heatmap of Bid Weight vs Utilisation Hours '
                                                  'with Profit (£)'),
                                     html.Div(id='weight-vs-actual-heatmap'),
                                 ],
@@ -2263,15 +2282,15 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     """
     S1: Utilisation versus costs
     """
-    util_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
-    util_costs_df['Energy (kWh)'] = util_costs_df['Actual Utilisation Hours'] * asset_cap
+    util_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Utilisation Hours'])
+    util_costs_df['Energy (kWh)'] = util_costs_df['Utilisation Hours'] * asset_cap
 
     # Calculate the marginal energy cost of utilisation (£/kWh) and the marginal hourly cost of utilisation (£/hr)
     energy_SRMC_calc_tmp = (1. / asset_effic) * energy_cost + (duos_nonevent - duos_event) + lcos
     hrly_util_calc_tmp = person_rate * (util_person_hrs / 60)
 
     util_costs_df['Marginal Cost of Utilisation (£)'] = (util_costs_df['Energy (kWh)'] * energy_SRMC_calc_tmp) + \
-                                                        (util_costs_df['Actual Utilisation Hours'] * hrly_util_calc_tmp)
+                                                        (util_costs_df['Utilisation Hours'] * hrly_util_calc_tmp)
 
     # TODO: Does not include an option for 'Other Fixed Costs' at the moment to reduce complexity as
     #  there doesn't seem to be much of a case for it for an intial version
@@ -2279,47 +2298,59 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     util_costs_df['Operational Cost (£)'] = util_costs_df['Marginal Cost of Utilisation (£)'] + \
                                             util_costs_df['Fixed Participation Cost (£)']
 
+    # Format printing of values in df
+    util_costs_df = df_fmting(util_costs_df)
+
     # Set index for datatable
-    util_costs_df.set_index('Actual Utilisation Hours')
+    util_costs_df.set_index('Utilisation Hours')
 
     """
     S2: Maximising Availability
     """
-    max_avail_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
+    max_avail_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Utilisation Hours'])
 
     # Enter the user submitted bid and calc. Revenue and Profit
-    max_avail_costs_df['Availability Bid (£)'] = avail_ceil
+    max_avail_costs_df['Availability Bid (£/kW/h)'] = avail_ceil
     max_avail_costs_df['Revenue (£)'] = avail_ceil * tot_avail_hrs * asset_cap
     max_avail_costs_df['Operational Profit (£)'] = max_avail_costs_df['Revenue (£)'] - util_costs_df[
         'Operational Cost (£)']
     max_avail_costs_df['TCV (£/kWh)'] = max_avail_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
 
+    # Format printing of values in df
+    max_avail_costs_df = df_fmting(max_avail_costs_df)
+
     """
     S3: Maximising Utilisation
     """
-    max_util_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
+    max_util_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Utilisation Hours'])
 
     # Enter the user submitted bid and calc. Revenue and Profit
-    max_util_costs_df['Utilisation Bid (£)'] = util_ceil
+    max_util_costs_df['Utilisation Bid (£/kWh)'] = util_ceil
     max_util_costs_df['Revenue (£)'] = util_costs_df['Energy (kWh)'] * util_ceil
     max_util_costs_df['Operational Profit (£)'] = max_util_costs_df['Revenue (£)'] - util_costs_df[
         'Operational Cost (£)']
     max_util_costs_df['TCV (£/kWh)'] = max_util_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
 
+    # Format printing of values in df
+    max_util_costs_df = df_fmting(max_util_costs_df)
+
     """
     S4: Break Even
     """
-    break_even_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Actual Utilisation Hours'])
+    break_even_costs_df = pd.DataFrame(np.arange(0, tot_avail_hrs + 1), columns=['Utilisation Hours'])
 
     # Calculate the Break Even params. based on user input
-    break_even_costs_df['Availability Bid (£)'] = (person_rate * (fixed_person_hrs / 60)) / asset_cap / tot_avail_hrs
+    break_even_costs_df['Availability Bid (£/kW/h)'] = (person_rate * (fixed_person_hrs / 60)) / asset_cap / tot_avail_hrs
     break_even_costs_df['Utilisatin Bid (£)'] = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent, duos_event,
                                                               lcos, person_rate, util_person_hrs)
-    break_even_costs_df['Revenue (£)'] = (break_even_costs_df['Availability Bid (£)'] * tot_avail_hrs * asset_cap) + \
+    break_even_costs_df['Revenue (£)'] = (break_even_costs_df['Availability Bid (£/kW/h)'] * tot_avail_hrs * asset_cap) + \
                                          (break_even_costs_df['Utilisatin Bid (£)'] * util_costs_df['Energy (kWh)'])
     break_even_costs_df['Operational Profit (£)'] = break_even_costs_df['Revenue (£)'] - util_costs_df[
         'Operational Cost (£)']
     break_even_costs_df['TCV (£/kWh)'] = break_even_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
+
+    # Format printing of values in df
+    break_even_costs_df = df_fmting(break_even_costs_df)
 
     """
     S5: User-Defined Bids and Costs
@@ -2330,10 +2361,13 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     user_bid_df = calc_costs(asset_cap, avail_bid, util_bid, person_rate,
                              fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]
 
+    # Format printing of values in df
+    user_bid_df = df_fmting(user_bid_df)
+
     # Produce data tables for reporting in thr Bid Analysis tab
     # TODO: Need to fix the unexpected left margins in the columns
     util_costs_datatbl = dash_table.DataTable(
-        data=util_costs_df[:21].round(2).to_dict("records"),
+        data=util_costs_df[:21].to_dict("records"),
         columns=[{"id": x, "name": x} for x in util_costs_df.columns],
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
@@ -2354,7 +2388,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
+                    'filter_query': '{{Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2366,7 +2400,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     ),
 
     max_avail_datatbl = dash_table.DataTable(
-        data=max_avail_costs_df[:21].round(2).to_dict("records"),
+        data=max_avail_costs_df[:21].to_dict("records"),
         columns=[{"id": x, "name": x} for x in max_avail_costs_df.columns],
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
@@ -2387,7 +2421,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
+                    'filter_query': '{{Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2399,7 +2433,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     ),
 
     max_util_databl = dash_table.DataTable(
-        data=max_util_costs_df[:21].round(2).to_dict("records"),
+        data=max_util_costs_df[:21].to_dict("records"),
         columns=[{"id": x, "name": x} for x in max_util_costs_df.columns],
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
@@ -2419,7 +2453,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
+                    'filter_query': '{{Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2431,7 +2465,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     ),
 
     break_even_datatbl = dash_table.DataTable(
-        data=break_even_costs_df[:21].round(2).to_dict("records"),
+        data=break_even_costs_df[:21].to_dict("records"),
         columns=[{"id": x, "name": x} for x in break_even_costs_df.columns],
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
@@ -2451,7 +2485,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
             },
             {
                 'if': {
-                    'filter_query': '{{Actual Utilisation Hours}} = {}'.format(exp_util_hrs)
+                    'filter_query': '{{Utilisation Hours}} = {}'.format(exp_util_hrs)
                 },
                 'backgroundColor': '#3D4E68',
                 'color': 'white'
@@ -2471,7 +2505,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     ),
 
     usr_bids_databl = dash_table.DataTable(
-        data=user_bid_df[:21].round(2).to_dict("records"),
+        data=user_bid_df[:21].to_dict("records"),
         columns=[{"id": x, "name": x} for x in user_bid_df.columns],
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
@@ -2511,7 +2545,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
         fill_width=False
     ),
 
-    # TCV exceedence warning under bid entry.
+    # TCV exceed warning under bid entry.
     tcv_exceed_warning = html.Div()
     calc_tcv = user_bid_df['TCV (£/kWh)'][user_bid_df['Utilisation Hours'] == exp_util_hrs].iloc[0]
 
