@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+
+__version__ = "0.1.2"
+
 import dash
 import yagmail
 import numpy as np
@@ -10,6 +13,7 @@ import dash_bootstrap_components as dbc
 from plotly.subplots import make_subplots
 from dash.exceptions import PreventUpdate
 from dash.dependencies import Input, Output
+from dash.dash_table.Format import Format, Group, Scheme, Symbol
 
 app = dash.Dash(__name__, meta_tags=[{"name": "viewport", "content": "width=device-width"}],
                 suppress_callback_exceptions=True)
@@ -60,7 +64,7 @@ def get_header(app):
             html.Div(
                 [
                     html.H2(
-                        "version 1.0",
+                        "Version "+__version__,
                         className="version",
                         style={"padding-left": 50,
                                "font-size": "14px",
@@ -75,24 +79,85 @@ def get_header(app):
     return header
 
 
-def df_fmting(df):
 
-    cols = df.columns.to_list()
-    var_dp_cols = {'Availability Bid (£/kW/h)': 3,
-                   'Energy (kWh)': 2,
-                   'Utilisation Hours': 0}
+def df_fmting(idx):
+    col_fmts = {
+        "Marginal Cost of Utilisation (£)": money_fmt(idx),
+        "Fixed Participation Cost (£)": money_fmt(idx),
+        "Operational Cost (£)": money_fmt(idx),
+        "Revenue (£)": money_fmt(idx),
+        "Operational Profit (£)": money_fmt(idx),
+        "Utilisation Hours": dict(
+            id=idx,
+            name=idx,
+            type='numeric',
+            format=Format(
+                scheme=Scheme.fixed,
+                precision=0,
+                group=Group.yes,
+                groups=3,
+                group_delimiter=',',
+                decimal_delimiter='.',
+                symbol=Symbol.no)),
+        "Energy (kWh)": dict(
+            id=idx,
+            name=idx,
+            type='numeric',
+            format=Format(
+                scheme=Scheme.fixed,
+                precision=1,
+                group=Group.yes,
+                groups=3,
+                group_delimiter=',',
+                decimal_delimiter='.',
+                symbol=Symbol.no)),
+        "Availability Bid (£/kW/h)": dict(
+            id=idx,
+            name=idx,
+            type='numeric',
+            format=Format(
+                scheme=Scheme.fixed,
+                precision=3,
+                group=Group.yes,
+                groups=3,
+                group_delimiter=',',
+                decimal_delimiter='.',
+                symbol=Symbol.no))
+        
+        
+        }
+    if idx in col_fmts.keys():
+        return col_fmts[idx]
+    else:
+        return dict(
+            id=idx,
+            name=idx,
+            type='numeric',
+            format=Format(
+                scheme=Scheme.fixed,
+                precision=2,
+                group=Group.yes,
+                groups=3,
+                group_delimiter=',',
+                decimal_delimiter='.',
+                symbol=Symbol.no))
 
-    # Format how values are printed depending on the column
-    for col in cols:
-        if col in var_dp_cols.keys():
-            # Handle specific cols for varying dp formats
-            df[col] = df[col].round(var_dp_cols[col])
-        else:
-            # Round values to 2 dp otherwise
-            df[col] = df[col].round(2)
-
-    return df
-
+def money_fmt(idx):
+    return dict(
+        id=idx,
+        name=idx,
+        type='numeric',
+        format=Format(
+            scheme=Scheme.fixed,
+            precision=2,
+            group=Group.yes,
+            groups=3,
+            group_delimiter=',',
+            decimal_delimiter='.',
+            symbol=Symbol.yes,
+            symbol_prefix=u'£'))
+    
+    
 
 # TODO: Does not include 'Other Fixed' at the moment
 def tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent,
@@ -222,9 +287,9 @@ def profit_vs_expected_util(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_c
     revenues = np.zeros((len(exp_util_range), len(weight_range), len(exp_util_range)))
     for i, exp_util in enumerate(exp_util_range):
         for j, weight in enumerate(weight_range):
-            bids = maxout_tcv(tcv, exp_util_hrs, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, weight)
+            bids = maxout_tcv(tcv, exp_util, tot_avail_hrs, util_ceil, avail_ceil, asset_cap, weight)
             costs = \
-                calc_costs(asset_cap, bids[0], bids[1], fixed_person_hrs / 60, person_rate, tot_SRMC, tot_avail_hrs)[
+                calc_costs(asset_cap, bids[0], bids[1], person_rate, fixed_person_hrs, tot_SRMC, tot_avail_hrs)[
                     0]
             profits[i][j] = costs[8]
             revenues[i][j] = costs[7]
@@ -2298,8 +2363,6 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     util_costs_df['Operational Cost (£)'] = util_costs_df['Marginal Cost of Utilisation (£)'] + \
                                             util_costs_df['Fixed Participation Cost (£)']
 
-    # Format printing of values in df
-    util_costs_df = df_fmting(util_costs_df)
 
     # Set index for datatable
     util_costs_df.set_index('Utilisation Hours')
@@ -2316,8 +2379,6 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
         'Operational Cost (£)']
     max_avail_costs_df['TCV (£/kWh)'] = max_avail_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
 
-    # Format printing of values in df
-    max_avail_costs_df = df_fmting(max_avail_costs_df)
 
     """
     S3: Maximising Utilisation
@@ -2331,8 +2392,6 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
         'Operational Cost (£)']
     max_util_costs_df['TCV (£/kWh)'] = max_util_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
 
-    # Format printing of values in df
-    max_util_costs_df = df_fmting(max_util_costs_df)
 
     """
     S4: Break Even
@@ -2341,16 +2400,14 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
 
     # Calculate the Break Even params. based on user input
     break_even_costs_df['Availability Bid (£/kW/h)'] = (person_rate * (fixed_person_hrs / 60)) / asset_cap / tot_avail_hrs
-    break_even_costs_df['Utilisatin Bid (£)'] = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent, duos_event,
+    break_even_costs_df['Utilisation Bid (£/kWh)'] = tot_marg_cost(asset_effic, asset_cap, energy_cost, duos_nonevent, duos_event,
                                                               lcos, person_rate, util_person_hrs)
     break_even_costs_df['Revenue (£)'] = (break_even_costs_df['Availability Bid (£/kW/h)'] * tot_avail_hrs * asset_cap) + \
-                                         (break_even_costs_df['Utilisatin Bid (£)'] * util_costs_df['Energy (kWh)'])
+                                         (break_even_costs_df['Utilisation Bid (£/kWh)'] * util_costs_df['Energy (kWh)'])
     break_even_costs_df['Operational Profit (£)'] = break_even_costs_df['Revenue (£)'] - util_costs_df[
         'Operational Cost (£)']
     break_even_costs_df['TCV (£/kWh)'] = break_even_costs_df['Revenue (£)'] / util_costs_df['Energy (kWh)']
 
-    # Format printing of values in df
-    break_even_costs_df = df_fmting(break_even_costs_df)
 
     """
     S5: User-Defined Bids and Costs
@@ -2361,14 +2418,12 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
     user_bid_df = calc_costs(asset_cap, avail_bid, util_bid, person_rate,
                              fixed_person_hrs, tot_SRMC, tot_avail_hrs)[1]
 
-    # Format printing of values in df
-    user_bid_df = df_fmting(user_bid_df)
 
     # Produce data tables for reporting in thr Bid Analysis tab
     # TODO: Need to fix the unexpected left margins in the columns
     util_costs_datatbl = dash_table.DataTable(
         data=util_costs_df[:21].to_dict("records"),
-        columns=[{"id": x, "name": x} for x in util_costs_df.columns],
+        columns=list(map(df_fmting, util_costs_df.columns)),
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
                     'padding-left': '0px'
@@ -2401,7 +2456,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
 
     max_avail_datatbl = dash_table.DataTable(
         data=max_avail_costs_df[:21].to_dict("records"),
-        columns=[{"id": x, "name": x} for x in max_avail_costs_df.columns],
+        columns=list(map(df_fmting, max_avail_costs_df.columns)),
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
                     'padding-left': '0px'
@@ -2434,7 +2489,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
 
     max_util_databl = dash_table.DataTable(
         data=max_util_costs_df[:21].to_dict("records"),
-        columns=[{"id": x, "name": x} for x in max_util_costs_df.columns],
+        columns=list(map(df_fmting, max_util_costs_df.columns)),
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
                     'padding-left': '0px'
@@ -2466,7 +2521,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
 
     break_even_datatbl = dash_table.DataTable(
         data=break_even_costs_df[:21].to_dict("records"),
-        columns=[{"id": x, "name": x} for x in break_even_costs_df.columns],
+        columns=list(map(df_fmting, break_even_costs_df.columns)),
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
                     'padding-left': '0px'
@@ -2506,7 +2561,7 @@ def datatables(tot_avail_hrs, tcv, exp_util_hrs, avail_bid, avail_ceil, util_bid
 
     usr_bids_databl = dash_table.DataTable(
         data=user_bid_df[:21].to_dict("records"),
-        columns=[{"id": x, "name": x} for x in user_bid_df.columns],
+        columns=list(map(df_fmting, user_bid_df.columns)),
         style_cell={'textAlign': 'center',
                     'textOverflow': 'ellipsis',
                     'padding-left': '0px',
