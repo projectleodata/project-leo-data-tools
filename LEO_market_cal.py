@@ -17,7 +17,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
-#pio.renderers.default = 'svg'
 pio.renderers.default = 'browser'
 
 np.seterr(divide='ignore') 
@@ -67,7 +66,7 @@ tot_fixed = ((fixed_person_hrs * person_rate)
             + other_fixed)
 
 ## marginal
-# marginal energy (kWh) - slightly different between excel and python?
+# marginal energy (kWh)
 if (asset_type == 'storage') and (service_type == "turn-up"):
     energy_SRMC = (((1/roundtrip_eff) * energy_cost)    # additional energy due to roundtrip eff
                    + (DUOS_recharge - DUOS_event)            # difference between DUOS rates  
@@ -114,7 +113,7 @@ def inde_maxTCV(exp_util_hrs):
     """
     Determines the availability and utilisation bid that maximises the TCV for
     the expected number of hours, but ensures profit is independent of actual
-    utilisation hours. This does not guarentee bids will be under the
+    utilisation hours. This does not guarantee bids will be under the
     individual ceiling prices.
     
     Parameters
@@ -140,15 +139,6 @@ def inde_maxTCV(exp_util_hrs):
     avail_bid = ((remaining_tcv * exp_util_hrs * cap) 
                  / cap 
                  / tot_avail_hrs)
-    
-    # don't think it's possible to ensure bids stay within ceiling price
-    # as util is defined by the marginal cost of delivery. If this is
-    # higher than the ceiling price, I don't think you can achieve what 
-    # this function sets out to achieve. Might look something like this:
-    
-    # util = np.min(tot_SRMC, util_max)
-    # avail, weight = calc_avail_bid(exp_util_hrs, util)
-    
     
     return avail_bid, util_bid, weight
 
@@ -204,7 +194,6 @@ def calc_costs(cap, avail_bid, util_bid, fixed_cost, marginal_rate,
     #profit = [0] * len(util_hours)
     #tcv = [0] * len(util_hours)
     
-    # calculations - actually, probably didn't need to define them all above
     energy = util_hours * cap
     marginal_cost = marginal_rate * energy
     fixed_cost = np.ones(util_hours.shape) * fixed_cost
@@ -233,9 +222,7 @@ def maxout_tcv(exp_util_hrs, bid_weight):
     """
     This calculates the availability and utilisation bids to max out the tcv
     for a given expected number of hours of delivery and chosen weighting
-    between availability and utilisation. This can be used to 
-    replicate Harry Orchards (HO) original analysis with bid_weight 0 for 
-    all availability and 1 for all utilisaton.
+    between availability and utilisation. 
 
     Parameters
     ----------
@@ -390,9 +377,7 @@ def plot_weight_vs_actual(profits, exp_util):
     fig, ax = plt.subplots(figsize=(15,6))
     sns.heatmap(profits[exp_util], ax=ax, annot=profits[exp_util], fmt='.2f', annot_kws={"fontsize":6})
     ax.set_xticklabels(['{:,.0f}'.format(x) for x in np.arange(0.0, tot_avail_hrs+1, 1.0)], rotation=45, ha='right', rotation_mode='anchor')
-    # ax.set_yticklabels(np.linspace(0.0,1.0,11), rotation=0, ha='right', rotation_mode='anchor')
     plt.gca().set_yticklabels(['{:,.1f}'.format(x) for x in np.linspace(0.0,1.0,11)], rotation=0, ha='right', rotation_mode='anchor')
-    # ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%0.1f'))
     ax.set_xlabel("Actual Utilisation Hours")
     ax.set_ylabel("Utilisation bid weighting")
     plt.show()
@@ -413,20 +398,6 @@ def plot_exp_vs_act_heatmap_plotly(profits, weight):
     weight_index = np.where(weight_range == weight)
 
     data = profits[:,weight_index[0][0],:]
-    
-    # lim = np.max(np.abs(profits))
-    
-    # using plotly express, i can't work out how to set 0 as midpoint of colorscale or how to annotate. 
-    # fig = px.imshow(data,
-    #             labels=dict(x="Actual Utilisation Hours", y="Expected Utilisation Hours", color="Profit (£)"),
-    #             x = np.arange(0.0, tot_avail_hrs+1, 1.0),
-    #             y = np.arange(0.0, tot_avail_hrs+1, 1.0),
-    #             color_continuous_scale='RdBu',
-    #               aspect="auto", 
-    #             )
-    
-    # using graph_objects, i can't work out how to add annotations in squares
-    # think it shoud be the text argument tbut thtat doesn't work.
     fig = make_subplots()
     fig.add_trace(go.Heatmap(x = np.arange(0.0, tot_avail_hrs+1, 1.0),
                               y = np.arange(0.0, tot_avail_hrs+1, 1.0),
@@ -459,15 +430,7 @@ def plot_weight_vs_act_heatmap_plotly(profits, exp_util_hrs):
     exp_index = np.where(exp_range == exp_util_hrs)
 
     data = profits[exp_index[0][0],:,:]
-    
-    # using graph_objects, i can't work out how to add annotations in squares
-    # think it shoud be the text argument but that doesn't work.
-    
-    # also want to add secondary axis which uses different 'unit'.
-    # e.g. weight 0 - 1 can also be expressed as utilisation bid 0 - util_max.
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
-    # this first one just makes the secondary y axis appear
     fig.add_trace(go.Heatmap(x = np.arange(0.0, tot_avail_hrs+1, 1.0),
                               y = np.linspace(0.0, util_ceil, profits.shape[1]),
                               z=data,
@@ -561,8 +524,6 @@ if __name__ == "__main__":
     print("Break even profit: £{:0.2f}".format(exp_profit))
     
     ## Maximum availability scenario
-    # recreates HO's max availability scenario. This ensures TCV is equal to
-    # the TCV limit.
     bids = maxout_tcv(exp_util_hrs, 0.0)
     max_avail_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
@@ -570,8 +531,6 @@ if __name__ == "__main__":
     print("Max availability profit: £{:0.2f}".format(exp_profit))
     
     ## Maximum utilisation scenario
-    # recreates HO's max utilisation scenario. This ensures TCV is equal to
-    # the TCV limit.
     bids = maxout_tcv(exp_util_hrs, 1.0)
     max_util_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
@@ -587,22 +546,13 @@ if __name__ == "__main__":
     exp_profit = middle_df["Profit (£)"][middle_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Middle profit: £{:0.2f}".format(exp_profit))
     
-    ## independent scenario
+    ## Independent scenario
     # this ensures profit is independent of actual hours vs expected utilisation.
     bids = inde_maxTCV(exp_util_hrs)
     inde_df = calc_costs(cap, bids[0], bids[1],
                               tot_fixed, tot_SRMC)[1]
     exp_profit = inde_df["Profit (£)"][inde_df["Utilisation hrs"]==exp_util_hrs].values[0]
     print("Independent profit: £{:0.2f}".format(exp_profit))
-    
-    
-    # analysis = profit_vs_expected_util_vs_weight(weight=0.5)
-    # plot_exp_vs_act_heatmap_plotly(analysis, 0.5)
-    # plot_weight_vs_act_heatmap_plotly(analysis ,exp_util_hrs)
-    
-    ## independent scenario
-    # bids = inde_maxTCV(exp_util_hrs)
-    # profit_vs_actual_plotly(exp_util_hrs, bids[0], bids[1])
     
     
     ## User defined
