@@ -2,16 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Jan 26 09:33:39 2022
-
 @author: scotwheeler
-
-Things to do/check
- - use correct language for profit, cost, revenue etc
- - something slightly different in the energy_SRMC between excel and python (something to do with python internal float representation maybe?)
- - use of global variables, and those in functions is messy
- - should probably wrap everything in a class (called Service?) This would help with the above point, and all global variables can be changed to self.
- - Current assumes 100% utilisation. How does the settlement rules for utilisation and availability impact the outcome.
- - add functionality to undercut tcv max. Can probably be done manualy by changing the tcv limit. Otherwise, add scaler to any function that uses tcv
 """
 
 __version__ = '0.2.0'
